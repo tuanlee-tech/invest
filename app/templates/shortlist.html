@@ -1,0 +1,227 @@
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Shortlist Cơ Hội</h1>
+    <div class="flex space-x-2">
+        <button onclick="runOpportunityScan()" class="btn btn-primary">Quét cơ hội mới</button>
+        <select id="filter-fund" class="input w-auto" onchange="loadShortlist()">
+            <option value="">Tất cả quỹ</option>
+            <option value="VEIL">VEIL</option>
+            <option value="VESAF">VESAF</option>
+            <option value="VCBF-BCF">VCBF-BCF</option>
+            <option value="PYN">PYN</option>
+        </select>
+        <select id="filter-action" class="input w-auto" onchange="loadShortlist()">
+            <option value="">Tất cả action</option>
+            <option value="BUY">BUY</option>
+            <option value="WATCH">WATCH</option>
+            <option value="AVOID">AVOID</option>
+        </select>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table id="shortlist-full-table">
+            <thead>
+                <tr>
+                    <th>Mã</th>
+                    <th>Action</th>
+                    <th>Entry Zone</th>
+                    <th>Target</th>
+                    <th>Stop</th>
+                    <th>Horizon</th>
+                    <th>Confidence</th>
+                    <th>Position %</th>
+                    <th>Thesis</th>
+                    <th>Catalysts</th>
+                    <th>Risks</th>
+                    <th>Evidence</th>
+                    <th>Version</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="proposal-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-xl font-bold" id="modal-title">Chi tiết Proposal</h2>
+            <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+        </div>
+        <div class="p-6" id="modal-content"></div>
+    </div>
+</div>
+
+<script>
+async function loadShortlist() {
+    const fund = document.getElementById('filter-fund').value;
+    const action = document.getElementById('filter-action').value;
+    let url = '/api/proposals?status=ACTIVE&limit=100';
+    if (fund) url += `&fund=${fund}`;
+    if (action) url += `&action=${action}`;
+    
+    try {
+        const proposals = await fetch(url).then(r => r.json());
+        const tbody = document.querySelector('#shortlist-full-table tbody');
+        tbody.innerHTML = proposals.map(p => `
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="openProposalDetail('${p.id}')">
+                <td class="font-mono font-medium">${p.ticker}</td>
+                <td><span class="badge badge-${p.action.toLowerCase()}">${p.action}</span></td>
+                <td>${formatPriceRange(p.entry_min, p.entry_max)}</td>
+                <td>${formatPriceRange(p.target_min, p.target_max)}</td>
+                <td>${p.stop_reference ? p.stop_reference.toLocaleString() : '-'}</td>
+                <td>${p.horizon_days} ngày</td>
+                <td>${p.confidence}%</td>
+                <td>${p.position_size_suggestion || 0}%</td>
+                <td class="max-w-xs truncate" title="${p.thesis}">${p.thesis.slice(0, 60)}...</td>
+                <td class="max-w-xs truncate">${(p.catalysts || []).join(', ').slice(0, 60)}...</td>
+                <td class="max-w-xs truncate">${(p.risks || []).join(', ').slice(0, 60)}...</td>
+                <td>${(p.evidence_refs || []).length} refs</td>
+                <td>v${p.version}</td>
+                <td>
+                    <button onclick="event.stopPropagation(); addToWatchlist('${p.ticker}')" class="btn btn-secondary text-xs px-2 py-1">Watchlist</button>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="14" class="text-center py-8 text-gray-500">Không có proposal phù hợp</td></tr>';
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function formatPriceRange(min, max) {
+    if (!min && !max) return '-';
+    if (min && max) return `${min.toLocaleString()} - ${max.toLocaleString()}`;
+    return (min || max).toLocaleString();
+}
+
+async function openProposalDetail(proposalId) {
+    const modal = document.getElementById('proposal-detail-modal');
+    const content = document.getElementById('modal-content');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    content.innerHTML = '<div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>';
+    
+    try {
+        const p = await fetch(`/api/proposals/${proposalId}`).then(r => r.json());
+        document.getElementById('modal-title').textContent = `${p.ticker} - ${p.action} v${p.version}`;
+        
+        content.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Thesis</h3>
+                    <p class="text-gray-700 whitespace-pre-wrap">${p.thesis}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Entry Zone</h3>
+                    <p>${formatPriceRange(p.entry_min, p.entry_max)}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Target</h3>
+                    <p>${formatPriceRange(p.target_min, p.target_max)}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Stop Loss</h3>
+                    <p>${p.stop_reference ? p.stop_reference.toLocaleString() + ' (' + p.stop_method + ')' : 'Chưa xác định'}</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Horizon</h3>
+                    <p>${p.horizon_days} ngày</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Confidence</h3>
+                    <p>${p.confidence}%</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Position Size</h3>
+                    <p>${p.position_size_suggestion || 0}% portfolio</p>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-900 mb-2">Valid</h3>
+                    <p>${new Date(p.valid_from).toLocaleDateString('vi-VN')} → ${new Date(p.valid_until).toLocaleDateString('vi-VN')}</p>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Catalysts</h3>
+                    <ul class="list-disc list-inside text-gray-700">${(p.catalysts || []).map(c => `<li>${c}</li>`).join('')}</ul>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Risks</h3>
+                    <ul class="list-disc list-inside text-gray-700">${(p.risks || []).map(r => `<li>${r}</li>`).join('')}</ul>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Invalidation Conditions</h3>
+                    <ul class="list-disc list-inside text-gray-700">${(p.invalidation_conditions || []).map(c => `<li>${c.description} (${c.severity})</li>`).join('')}</ul>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Evidence References</h3>
+                    <ul class="list-disc list-inside text-gray-700">${(p.evidence_refs || []).map(e => `<li>${e}</li>`).join('')}</ul>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Reasoning Summary</h3>
+                    <p class="text-gray-700 whitespace-pre-wrap">${p.reasoning_summary || 'N/A'}</p>
+                </div>
+                <div class="md:col-span-2">
+                    <h3 class="font-semibold text-gray-900 mb-2">Changed from Previous</h3>
+                    <p class="text-gray-700 whitespace-pre-wrap">${p.changed_from_previous || 'Initial proposal'}</p>
+                </div>
+            </div>
+            <div class="mt-6 pt-6 border-t border-gray-200 flex justify-end space-x-3">
+                <button onclick="reviseProposal('${p.id}')" class="btn btn-primary">Tạo Revision</button>
+                <button onclick="addToWatchlist('${p.ticker}')" class="btn btn-secondary">Thêm Watchlist</button>
+            </div>
+        `;
+    } catch (e) {
+        content.innerHTML = `<div class="text-red-600">Lỗi tải chi tiết: ${e.message}</div>`;
+    }
+}
+
+function closeModal() {
+    document.getElementById('proposal-detail-modal').classList.add('hidden');
+    document.getElementById('proposal-detail-modal').classList.remove('flex');
+}
+
+async function addToWatchlist(ticker) {
+    await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ticker})
+    });
+    alert(`Đã thêm ${ticker} vào watchlist`);
+}
+
+async function reviseProposal(proposalId) {
+    const p = await fetch(`/api/proposals/${proposalId}`).then(r => r.json());
+    const newAction = prompt('Action mới (BUY/HOLD/REDUCE/EXIT/ADD/WATCH/AVOID):', p.action);
+    if (!newAction) return;
+    
+    const newThesis = prompt('Thesis cập nhật:', p.thesis);
+    if (!newThesis) return;
+    
+    const newConfidence = prompt('Confidence (0-100):', p.confidence);
+    if (!newConfidence) return;
+    
+    const changed = prompt('Lý do thay đổi:', '');
+    if (!changed) return;
+    
+    await fetch(`/api/proposals/${proposalId}/revise`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            action: newAction,
+            thesis: newThesis,
+            confidence: parseFloat(newConfidence),
+            changed_from_previous: changed
+        })
+    });
+    closeModal();
+    loadShortlist();
+    alert('Đã tạo revision mới');
+}
+
+async function runOpportunityScan() {
+    alert('Chạy opportunity scan... (chưa implement engine)');
+}
+
+loadShortlist();
+</script>

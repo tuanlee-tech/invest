@@ -1,0 +1,15 @@
+fastapi==0.141.1
+uvicorn==0.53.0
+sqlalchemy==2.0.54
+alembic==1.20.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+python-multipart==0.0.32
+httpx==0.28.1
+feedparser==6.0.14
+pypdf==6.19.0
+vnstock==4.0.8
+apscheduler==3.11.3
+python-dotenv==1.2.3
+jinja2==3.1.6
+markdown2==2.5.5

@@ -1,0 +1,223 @@
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Quản Lý Danh Mục</h1>
+    <div class="flex space-x-2">
+        <button onclick="openNewPositionModal()" class="btn btn-primary">+ Thêm Vị Thế</button>
+        <button onclick="reEvaluatePortfolio()" class="btn btn-secondary">Đánh Giá Lại Danh Mục</button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-6">
+        <p class="text-sm text-gray-500">Tổng Giá Trị Danh Mục</p>
+        <p id="total-portfolio-value" class="text-3xl font-bold text-gray-900">-</p>
+    </div>
+    <div class="card p-6">
+        <p class="text-sm text-gray-500">Tổng Vốn Đầu Tư</p>
+        <p id="total-cost-basis" class="text-3xl font-bold text-gray-900">-</p>
+    </div>
+    <div class="card p-6">
+        <p class="text-sm text-gray-500">Tổng Lời/Lỗ</p>
+        <p id="total-pnl" class="text-3xl font-bold">-</p>
+    </div>
+    <div class="card p-6">
+        <p class="text-sm text-gray-500">Số Vị Thế Đang Giữ</p>
+        <p id="active-positions-count" class="text-3xl font-bold text-gray-900">-</p>
+    </div>
+</div>
+
+<!-- Positions Table -->
+<div class="card mb-6">
+    <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+        <h2 class="text-lg font-semibold">Vị Thế Đang Nắm Giữ</h2>
+        <select id="filter-position-status" class="input w-auto" onchange="loadPositions()">
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="CLOSED">CLOSED</option>
+            <option value="">Tất cả</option>
+        </select>
+    </div>
+    <div class="table-container">
+        <table id="positions-full-table">
+            <thead>
+                <tr>
+                    <th>Mã</th>
+                    <th>Ngày mua</th>
+                    <th>Số lượng</th>
+                    <th>Giá mua TB</th>
+                    <th>Giá hiện tại</th>
+                    <th>Giá trị thị trường</th>
+                    <th>P&L</th>
+                    <th>P&L %</th>
+                    <th>Khuyến nghị AI</th>
+                    <th>Thesis Health</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Transactions Modal -->
+<div id="position-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl max-w-lg w-full">
+        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+            <h2 class="text-xl font-bold" id="pos-modal-title">Thêm Vị Thế Mới</h2>
+            <button onclick="closePosModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+        </div>
+        <form id="position-form" onsubmit="savePosition(event)" class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mã Cổ Phiếu</label>
+                <input type="text" id="pos-ticker" required class="input uppercase">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Số Lượng</label>
+                <input type="number" id="pos-quantity" step="any" required class="input">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Giá Mua Trung Bình</label>
+                <input type="number" id="pos-price" step="any" required class="input">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ngày Mua</label>
+                <input type="date" id="pos-date" required class="input">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Phí Giao Dịch</label>
+                <input type="number" id="pos-fees" step="any" value="0" class="input">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ghi Chú</label>
+                <textarea id="pos-notes" class="input" rows="2"></textarea>
+            </div>
+            <div class="flex justify-end space-x-3 pt-4">
+                <button type="button" onclick="closePosModal()" class="btn btn-secondary">Hủy</button>
+                <button type="submit" class="btn btn-primary">Lưu Vị Thế</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function loadPositions() {
+    const status = document.getElementById('filter-position-status').value;
+    let url = '/api/positions';
+    if (status) url += `?status=${status}`;
+    
+    try {
+        const positions = await fetch(url).then(r => r.json());
+        
+        let totalCost = 0;
+        let totalVal = 0;
+        let activeCount = 0;
+
+        const tbody = document.querySelector('#positions-full-table tbody');
+        tbody.innerHTML = positions.map(p => {
+            const cost = p.quantity * p.avg_buy_price;
+            totalCost += cost;
+            // Placeholder current price logic
+            const currentPrice = p.avg_buy_price * 1.05; // placeholder
+            const val = p.quantity * currentPrice;
+            totalVal += val;
+            const pnl = val - cost;
+            const pnlPct = ((currentPrice - p.avg_buy_price) / p.avg_buy_price) * 100;
+            if (p.status === 'ACTIVE') activeCount++;
+
+            return `
+                <tr class="hover:bg-gray-50">
+                    <td class="font-mono font-medium">${p.ticker}</td>
+                    <td>${new Date(p.buy_date).toLocaleDateString('vi-VN')}</td>
+                    <td>${p.quantity.toLocaleString()}</td>
+                    <td>${p.avg_buy_price.toLocaleString()}</td>
+                    <td>${currentPrice.toLocaleString()}</td>
+                    <td>${val.toLocaleString()}</td>
+                    <td class="${pnl >= 0 ? 'text-green-600' : 'text-red-600'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
+                    <td class="${pnlPct >= 0 ? 'text-green-600' : 'text-red-600'}">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%</td>
+                    <td><span class="badge badge-${p.current_action.toLowerCase()}">${p.current_action}</span></td>
+                    <td><span class="badge ${p.thesis_health === 'HEALTHY' ? 'badge-buy' : p.thesis_health === 'AT_RISK' ? 'badge-watch' : 'badge-sell'}">${p.thesis_health}</span></td>
+                    <td>
+                        <button onclick="addTransactionModal('${p.id}', '${p.ticker}')" class="btn btn-secondary text-xs px-2 py-1">Giao dịch</button>
+                    </td>
+                </tr>
+            `;
+        }).join('') || '<tr><td colspan="11" class="text-center py-8 text-gray-500">Chưa có vị thế</td></tr>';
+
+        document.getElementById('total-portfolio-value').textContent = totalVal.toLocaleString() + ' đ';
+        document.getElementById('total-cost-basis').textContent = totalCost.toLocaleString() + ' đ';
+        const totalPnl = totalVal - totalCost;
+        const pnlEl = document.getElementById('total-pnl');
+        pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' đ';
+        pnlEl.className = `text-3xl font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        document.getElementById('active-positions-count').textContent = activeCount;
+
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function openNewPositionModal() {
+    document.getElementById('pos-modal-title').textContent = 'Thêm Vị Thế Mới';
+    document.getElementById('position-form').reset();
+    document.getElementById('pos-date').valueAsDate = new Date();
+    document.getElementById('position-modal').classList.remove('hidden');
+    document.getElementById('position-modal').classList.add('flex');
+}
+
+function closePosModal() {
+    document.getElementById('position-modal').classList.add('hidden');
+    document.getElementById('position-modal').classList.remove('flex');
+}
+
+async function savePosition(e) {
+    e.preventDefault();
+    const data = {
+        ticker: document.getElementById('pos-ticker').value.toUpperCase(),
+        quantity: parseFloat(document.getElementById('pos-quantity').value),
+        avg_buy_price: parseFloat(document.getElementById('pos-price').value),
+        buy_date: document.getElementById('pos-date').value,
+        fees: parseFloat(document.getElementById('pos-fees').value || 0),
+        notes: document.getElementById('pos-notes').value,
+    };
+
+    try {
+        await fetch('/api/positions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        closePosModal();
+        loadPositions();
+    } catch (err) {
+        alert('Lỗi lưu vị thế: ' + err.message);
+    }
+}
+
+function addTransactionModal(posId, ticker) {
+    const action = prompt(`Giao dịch cho ${ticker} (ADD / REDUCE / SELL):`, 'ADD');
+    if (!action) return;
+    const qty = prompt('Số lượng:', '100');
+    if (!qty) return;
+    const price = prompt('Giá:', '100000');
+    if (!price) return;
+    
+    fetch(`/api/positions/${posId}/transact`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            ticker,
+            action,
+            quantity: parseFloat(qty),
+            price: parseFloat(price),
+            fees: 0,
+            transaction_date: new Date().toISOString().split('T')[0],
+            notes: 'Manual entry'
+        })
+    }).then(() => loadPositions());
+}
+
+function reEvaluatePortfolio() {
+    alert('Đang đánh giá lại danh mục... (Portfolio Engine)');
+}
+
+loadPositions();
+</script>
