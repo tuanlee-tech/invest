@@ -1,21 +1,25 @@
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Sự Kiện & Tin Tức</h1>
-    <div class="flex space-x-2">
-        <button onclick="fetchLatestNews()" class="btn btn-primary">Thu Thập Tin Tức Mới</button>
-        <select id="filter-event-type" class="input w-auto" onchange="loadEvents()">
-            <option value="">Tất cả loại tin</option>
-            <option value="news">Tin tức / Báo chí</option>
+<div class="flex flex-col md:flex-row md:items-end gap-4 mb-5">
+    <div class="flex-1 min-w-0">
+        <p class="label">Tín hiệu sớm · fact trước, suy luận sau</p>
+        <h1 class="display text-[26px] md:text-[34px] font-extrabold mt-1">Dòng sự kiện</h1>
+        <p class="text-[13.5px] mt-1" style="color: var(--ink-soft)">Mỗi sự kiện giữ nguồn gốc, thời điểm và chuỗi tác động suy luận riêng.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+        <button onclick="fetchLatestNews()" class="btn btn-accent btn-sm" id="btn-fetch-news">Nạp tin mới</button>
+        <select id="filter-event-type" class="input" onchange="loadEvents()" aria-label="Lọc loại sự kiện">
+            <option value="">Mọi loại tin</option>
+            <option value="news">Tin tức / báo chí</option>
             <option value="macro">Kinh tế vĩ mô</option>
             <option value="disclosure">Công bố thông tin</option>
             <option value="corporate_action">Sự kiện doanh nghiệp</option>
         </select>
-        <input type="text" id="filter-event-ticker" class="input w-32 uppercase" placeholder="Lọc theo mã" onkeyup="if(event.key==='Enter') loadEvents()">
+        <input type="text" id="filter-event-ticker" class="input mono uppercase" style="width: 130px" placeholder="Mã, vd HPG" onkeyup="if(event.key==='Enter') loadEvents()">
     </div>
 </div>
 
 <div class="card">
-    <div class="p-6">
-        <div id="events-full-list" class="space-y-4"></div>
+    <div class="card-pad">
+        <div id="events-full-list" class="flex flex-col gap-3"></div>
     </div>
 </div>
 
@@ -26,59 +30,66 @@ async function loadEvents() {
     let url = '/api/events?limit=50';
     if (type) url += `&source_type=${type}`;
     if (ticker) url += `&ticker=${ticker}`;
-    
+
+    const listDiv = document.getElementById('events-full-list');
+    listDiv.innerHTML = '<div class="skel mb-2"></div><div class="skel mb-2"></div><div class="skel" style="width:60%"></div>';
+
     try {
         const events = await fetch(url).then(r => r.json());
-        const listDiv = document.getElementById('events-full-list');
         listDiv.innerHTML = events.map(e => `
-            <div class="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:border-indigo-200 transition-colors">
-                <div class="flex items-start justify-between">
-                    <div>
-                        <div class="flex items-center space-x-2">
-                            <span class="badge ${e.classification === 'FACT' ? 'badge-buy' : 'badge-watch'}">${e.classification}</span>
-                            <span class="text-xs text-gray-500">${e.source_name}</span>
-                            <span class="text-xs text-gray-400">•</span>
-                            <span class="text-xs text-gray-500">${new Date(e.occurred_at).toLocaleString('vi-VN')}</span>
-                        </div>
-                        <h3 class="font-semibold text-gray-900 mt-1">
-                            <a href="${e.source_url}" target="_blank" class="hover:text-indigo-600">${e.headline}</a>
-                        </h3>
-                    </div>
+            <article class="evidence">
+                <div class="flex flex-wrap items-center gap-2 text-[11px] mono" style="color:var(--faint)">
+                    <span class="tag ${e.classification === 'FACT' ? 'tag-buy' : 'tag-watch'}"><span class="dot"></span>${e.classification}</span>
+                    <span>${e.source_name || ''}</span><span>·</span>
+                    <span>${new Date(e.occurred_at).toLocaleString('vi-VN')}</span>
                 </div>
-                <div class="text-sm text-gray-600 mt-2">${e.summary || ''}</div>
-                
+                <h3 class="text-[15px] font-bold mt-1.5 leading-snug" style="letter-spacing:-0.01em;text-wrap:balance">
+                    <a href="${e.source_url}" target="_blank" rel="noopener" class="hover:underline" style="text-decoration-color: var(--accent)">${e.headline}</a>
+                </h3>
+                <p class="text-[13.5px] mt-1.5 leading-relaxed" style="color:var(--ink-soft);max-width:72ch">${e.summary || ''}</p>
+
                 ${e.causal_links && e.causal_links.length ? `
-                    <div class="mt-3 pt-3 border-t border-gray-200">
-                        <p class="text-xs font-semibold text-gray-500 uppercase mb-1">Chuỗi Tác Động Suy Luận (Causal Chain):</p>
-                        <div class="space-y-1">
+                    <div class="mt-3 pt-3" style="border-top:1px solid var(--line)">
+                        <p class="label mb-2">Chuỗi tác động suy luận</p>
+                        <div class="flex flex-col gap-1.5">
                             ${e.causal_links.map(c => `
-                                <div class="text-xs bg-white p-2 rounded border border-gray-100 flex items-center justify-between">
-                                    <span>
-                                        <strong class="font-mono">${c.target_ticker}</strong>: 
-                                        <span class="${c.direction === 'POSITIVE' ? 'text-green-600' : 'text-red-600'} font-medium">
-                                            ${c.direction === 'POSITIVE' ? 'Hưởng lợi' : 'Thiệt hại'}
-                                        </span> 
-                                        — ${c.mechanism}
+                                <div class="causal ${c.direction === 'POSITIVE' ? '' : 'neg'} flex items-center justify-between gap-3">
+                                    <span class="text-[12.5px] leading-snug">
+                                        <strong class="mono">${c.target_ticker}</strong>
+                                        <span class="font-semibold" style="color:${c.direction === 'POSITIVE' ? 'var(--accent-ink)' : 'var(--danger)'}">
+                                            ${c.direction === 'POSITIVE' ? 'hưởng lợi' : 'chịu áp lực'}
+                                        </span>
+                                        <span style="color:var(--ink-soft)"> — ${c.mechanism}</span>
                                     </span>
-                                    <span class="text-gray-400 font-mono">${c.confidence}% tin cậy</span>
+                                    <span class="mono text-[11px] whitespace-nowrap" style="color:var(--faint)">${c.confidence}%</span>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
                 ` : ''}
 
-                <div class="flex flex-wrap gap-1 mt-3">
-                    ${(e.entities || []).map(t => `<span class="badge badge-watch text-xs">${t}</span>`).join('')}
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                    ${(e.entities || []).map(t => `<span class="fund-chip">${t}</span>`).join('')}
                 </div>
-            </div>
-        `).join('') || '<p class="text-gray-500 text-center py-8">Chưa có sự kiện nào</p>';
+            </article>
+        `).join('') || '<div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có sự kiện nào</p><p class="text-[13px]">Nới bộ lọc hoặc nạp tin tức mới.</p></div>';
     } catch (e) {
-        console.error(e);
+        listDiv.innerHTML = `<div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được sự kiện: ${e.message}</p></div>`;
     }
 }
 
 async function fetchLatestNews() {
-    alert('Đang thu thập tin tức từ RSS... (Ingestion Engine)');
+    const btn = document.getElementById('btn-fetch-news');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+    try {
+        await fetch('/api/jobs/ingestion', { method: 'POST' });
+        toast('Đã nạp tin tức mới nhất');
+        await loadEvents();
+    } catch (e) {
+        toast('Nạp tin thất bại: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
 }
 
 loadEvents();

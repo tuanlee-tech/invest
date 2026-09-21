@@ -3,161 +3,399 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="VN Investment Intelligence — theo dõi danh mục quỹ lớn, phát hiện sớm sự kiện thị trường, đề xuất đầu tư có bằng chứng.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131715'/%3E%3Crect x='8' y='17' width='5' height='7' rx='1.5' fill='%2338B48A'/%3E%3Crect x='14.5' y='12' width='5' height='12' rx='1.5' fill='%2338B48A'/%3E%3Crect x='21' y='7' width='5' height='17' rx='1.5' fill='%23E8F3EC'/%3E%3C/svg%3E">
     <title>VN Investment Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .nav-link { @apply px-4 py-2 rounded-lg text-sm font-medium transition-colors; }
-        .nav-link.active { @apply bg-indigo-600 text-white; }
-        .nav-link:not(.active) { @apply text-gray-600 hover:bg-gray-100; }
-        .card { @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden; }
-        .table-container { @apply overflow-x-auto; }
-        table { @apply w-full text-sm; }
-        th { @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50; }
-        td { @apply px-4 py-3 border-t border-gray-100; }
-        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
-        .badge-buy { @apply bg-green-100 text-green-800; }
-        .badge-hold { @apply bg-yellow-100 text-yellow-800; }
-        .badge-sell { @apply bg-red-100 text-red-800; }
-        .badge-watch { @apply bg-blue-100 text-blue-800; }
-        .badge-avoid { @apply bg-gray-100 text-gray-800; }
-        .input { @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm; }
-        .btn { @apply px-4 py-2 rounded-lg font-medium text-sm transition-colors; }
-        .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-700; }
-        .btn-secondary { @apply bg-gray-100 text-gray-700 hover:bg-gray-200; }
-        .evidence-item { @apply p-3 bg-gray-50 rounded-lg border border-gray-100; }
-        .thesis-block { @apply space-y-3; }
+        :root {
+            --ink: #131715;
+            --ink-soft: #3d4742;
+            --muted: #68736d;
+            --faint: #9aa5a0;
+            --paper: #f2f4f1;
+            --surface: #fbfcfa;
+            --line: #dfe4de;
+            --accent: #0c6b4e;
+            --accent-ink: #0a5740;
+            --accent-wash: #e4f0e9;
+            --danger: #b3261e;
+            --danger-wash: #f7e7e5;
+            --warn: #8a5f00;
+            --warn-wash: #f5ecd4;
+            --shadow-tint: 12 107 78;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Be Vietnam Pro', system-ui, sans-serif;
+            background: var(--paper);
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+        }
+        /* film grain to break digital flatness */
+        body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            pointer-events: none;
+            opacity: .05;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+        }
+        .display { letter-spacing: -0.035em; line-height: 1.02; text-wrap: balance; }
+        .lede { max-width: 62ch; line-height: 1.65; }
+        .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+        .tnum { font-variant-numeric: tabular-nums; }
+        .label { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+        .wrap { max-width: 1280px; margin-inline: auto; padding-inline: 20px; }
+        @media (min-width: 768px) { .wrap { padding-inline: 28px; } }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 1px 2px rgba(19,23,21,.05), 0 18px 40px -24px rgb(var(--shadow-tint) / .28);
+            overflow: hidden;
+        }
+        .card-pad { padding: 22px; }
+        @media (min-width: 768px) { .card-pad { padding: 26px; } }
+        .card-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; padding: 18px 22px;
+            border-bottom: 1px solid var(--line);
+        }
+        @media (min-width: 768px) { .card-head { padding: 18px 26px; } }
+
+        .nav-shell {
+            position: sticky; top: 0; z-index: 50;
+            background: rgb(242 244 241 / .88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-bottom: 1px solid var(--line);
+        }
+        .nav-link {
+            display: inline-flex; align-items: center;
+            padding: 8px 14px; border-radius: 999px;
+            font-size: 13px; font-weight: 500; color: var(--ink-soft);
+            transition: background .2s ease, color .2s ease, transform .15s ease;
+        }
+        .nav-link:hover { background: #e7ece7; color: var(--ink); }
+        .nav-link:active { transform: scale(.97); }
+        .nav-link.active { background: var(--ink); color: #f4f6f3; }
+        .nav-link:focus-visible, .btn:focus-visible, .input:focus-visible, select.input:focus-visible {
+            outline: 2px solid var(--accent); outline-offset: 2px;
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            padding: 10px 18px; border-radius: 12px;
+            font-size: 13.5px; font-weight: 600;
+            transition: transform .15s ease, background .2s ease, box-shadow .2s ease, border-color .2s ease;
+            cursor: pointer; border: 1px solid transparent;
+        }
+        .btn:active { transform: scale(.97) translateY(1px); }
+        .btn-primary { background: var(--ink); color: #f5f7f4; }
+        .btn-primary:hover { background: #232b27; box-shadow: 0 10px 24px -12px rgb(var(--shadow-tint) / .55); transform: translateY(-1px); }
+        .btn-accent { background: var(--accent); color: #fff; }
+        .btn-accent:hover { background: var(--accent-ink); transform: translateY(-1px); box-shadow: 0 10px 24px -12px rgb(var(--shadow-tint) / .6); }
+        .btn-ghost { background: transparent; color: var(--ink-soft); border-color: var(--line); }
+        .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+        .btn-sm { padding: 7px 12px; font-size: 12.5px; border-radius: 10px; }
+
+        .input, select.input {
+            width: 100%; padding: 10px 14px;
+            background: #fff; border: 1px solid var(--line); border-radius: 12px;
+            font-size: 13.5px; color: var(--ink);
+            transition: border-color .2s ease, box-shadow .2s ease;
+        }
+        .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgb(var(--shadow-tint) / .16); }
+        select.input { width: auto; font-weight: 500; cursor: pointer; }
+        label.field { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; }
+
+        .table-scroll { overflow-x: auto; }
+        table.grid-table { width: 100%; font-size: 13.5px; border-collapse: separate; border-spacing: 0; }
+        .grid-table thead th {
+            position: sticky; top: 0; z-index: 1;
+            padding: 11px 16px; text-align: left;
+            font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+            color: var(--muted); background: #f0f3ef;
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+        }
+        .grid-table tbody td { padding: 13px 16px; border-bottom: 1px solid #ecefec; vertical-align: middle; }
+        .grid-table tbody tr { transition: background .15s ease; }
+        .grid-table tbody tr:hover { background: #eef3ed; }
+        .grid-table tbody tr:last-child td { border-bottom: none; }
+
+        .tag {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 5px 11px 5px 9px; border-radius: 8px;
+            font-size: 11.5px; font-weight: 600; letter-spacing: .04em;
+            border: 1px solid var(--line); background: #fff; color: var(--ink-soft);
+            white-space: nowrap;
+        }
+        .tag .dot { width: 7px; height: 7px; border-radius: 99px; background: var(--faint); flex: none; }
+        .tag-buy { background: var(--accent-wash); border-color: #bcd9c9; color: var(--accent-ink); }
+        .tag-buy .dot { background: var(--accent); }
+        .tag-hold { background: var(--warn-wash); border-color: #e3d3a6; color: #6d4d00; }
+        .tag-hold .dot { background: #c08f00; }
+        .tag-sell, .tag-exit, .tag-reduce { background: var(--danger-wash); border-color: #e5b8b3; color: #8f1d17; }
+        .tag-sell .dot, .tag-exit .dot, .tag-reduce .dot { background: var(--danger); }
+        .tag-watch, .tag-add { background: #e8eef4; border-color: #c3d2de; color: #274b63; }
+        .tag-watch .dot, .tag-add .dot { background: #2f6f8f; }
+        .tag-avoid { background: #ececea; border-color: #d8d8d4; color: #55554e; }
+
+        .stat-num { letter-spacing: -0.03em; line-height: 1; text-wrap: balance; }
+
+        .evidence { background: #f3f5f2; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+
+        .causal {
+            background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+            border-radius: 12px; padding: 10px 12px;
+        }
+        .causal.neg { border-left-color: var(--danger); }
+
+        /* staggered entry: transform + opacity only */
+        @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        .rise { animation: rise .5s cubic-bezier(.22,.8,.32,1) both; }
+        .rise-1 { animation-delay: .04s; } .rise-2 { animation-delay: .1s; }
+        .rise-3 { animation-delay: .16s; } .rise-4 { animation-delay: .22s; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+            html { scroll-behavior: auto; }
+        }
+
+        .skel { position: relative; overflow: hidden; background: #e8ece7; border-radius: 10px; min-height: 14px; }
+        .skel::after {
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / .75) 50%, transparent 80%);
+            animation: shimmer 1.4s infinite; transform: translateX(-100%);
+        }
+        @keyframes shimmer { to { transform: translateX(100%); } }
+
+        .empty { text-align: center; padding: 44px 20px; color: var(--muted); }
+        .empty .glyph {
+            width: 44px; height: 44px; margin: 0 auto 12px; border-radius: 14px;
+            background: var(--accent-wash); border: 1px solid #bcd9c9;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--accent-ink); font-weight: 700;
+        }
+
+        .modal-veil { background: rgb(19 23 21 / .55); backdrop-filter: blur(3px); }
+        .modal-panel { box-shadow: 0 32px 80px -24px rgb(19 23 21 / .45); }
+
+        #toast-root { position: fixed; bottom: 22px; right: 22px; z-index: 100; display: flex; flex-direction: column; gap: 10px; }
+        .toast {
+            background: var(--ink); color: #f2f5f1;
+            border-radius: 12px; padding: 12px 16px; font-size: 13px; font-weight: 500;
+            box-shadow: 0 18px 40px -16px rgb(19 23 21 / .6);
+            animation: rise .3s ease both; max-width: 340px;
+        }
+        .toast.err { background: #4a1410; }
+
+        .skip-link {
+            position: absolute; left: -999px; top: 8px; z-index: 100;
+            background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px;
+        }
+        .skip-link:focus { left: 8px; }
+
+        .hero-band {
+            border: 1px solid var(--line); border-radius: 22px;
+            background:
+                radial-gradient(560px 260px at 12% 0%, rgb(var(--shadow-tint) / .14), transparent 65%),
+                radial-gradient(480px 240px at 95% 110%, rgb(var(--shadow-tint) / .1), transparent 60%),
+                var(--surface);
+            box-shadow: 0 1px 2px rgba(19,23,21,.05), 0 24px 48px -30px rgb(var(--shadow-tint) / .35);
+        }
+        .fund-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; font-weight: 600;
+            background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px;
+        }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4">
-            <div class="flex items-center justify-between h-14">
-                <div class="flex items-center space-x-8">
-                    <a href="/" class="text-xl font-bold text-indigo-600">VN Intelligence</a>
-                    <div class="hidden md:flex space-x-1">
-                        <a href="/" class="nav-link active" id="nav-dashboard">Dashboard</a>
+<body class="min-h-screen">
+    <a href="#main-content" class="skip-link">Bỏ qua tới nội dung</a>
+
+    <header class="nav-shell">
+        <div class="wrap">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-8 min-w-0">
+                    <a href="/" class="flex items-center gap-2.5" aria-label="VN Intelligence — trang chủ">
+                        <span aria-hidden="true" class="flex items-end gap-[3px] w-8 h-8 rounded-[10px] px-[7px] pb-[7px] pt-[6px]" style="background: var(--ink)">
+                            <span class="w-[4px] rounded-sm" style="height: 10px; background: #38b48a"></span>
+                            <span class="w-[4px] rounded-sm" style="height: 15px; background: #38b48a"></span>
+                            <span class="w-[4px] rounded-sm" style="height: 19px; background: #e8f3ec"></span>
+                        </span>
+                        <span class="leading-none">
+                            <span class="block text-[15px] font-bold" style="letter-spacing: -0.02em">VN Intelligence</span>
+                            <span class="block text-[11px] font-medium" style="color: var(--muted)">theo dấu dòng tiền quỹ lớn</span>
+                        </span>
+                    </a>
+                    <nav class="hidden lg:flex items-center gap-1" aria-label="Điều hướng chính">
+                        <a href="/" class="nav-link active" id="nav-dashboard">Tổng quan</a>
                         <a href="/shortlist" class="nav-link" id="nav-shortlist">Shortlist</a>
-                        <a href="/portfolio" class="nav-link" id="nav-portfolio">Portfolio</a>
-                        <a href="/events" class="nav-link" id="nav-events">Events</a>
-                        <a href="/track-record" class="nav-link" id="nav-track">Track Record</a>
-                        <a href="/settings" class="nav-link" id="nav-settings">Settings</a>
+                        <a href="/portfolio" class="nav-link" id="nav-portfolio">Danh mục</a>
+                        <a href="/events" class="nav-link" id="nav-events">Sự kiện</a>
+                        <a href="/track-record" class="nav-link" id="nav-track">Track record</a>
+                        <a href="/settings" class="nav-link" id="nav-settings">Cài đặt</a>
+                    </nav>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="last-update" class="mono hidden md:inline text-[11.5px]" style="color: var(--faint)"></span>
+                    <button onclick="refreshAll()" class="btn btn-ghost btn-sm">Làm mới</button>
+                </div>
+            </div>
+            <nav class="lg:hidden flex gap-1 pb-3 overflow-x-auto" aria-label="Điều hướng di động">
+                <a href="/" class="nav-link active" id="nav-dashboard-m">Tổng quan</a>
+                <a href="/shortlist" class="nav-link" id="nav-shortlist-m">Shortlist</a>
+                <a href="/portfolio" class="nav-link" id="nav-portfolio-m">Danh mục</a>
+                <a href="/events" class="nav-link" id="nav-events-m">Sự kiện</a>
+                <a href="/track-record" class="nav-link" id="nav-track-m">Track record</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="wrap py-6 md:py-8" id="main-content">
+        <div id="view-dashboard">
+            <section class="hero-band rise rise-1 p-6 md:p-8 mb-5">
+                <div class="flex flex-col lg:flex-row lg:items-end gap-5 lg:gap-10">
+                    <div class="flex-1 min-w-0">
+                        <p class="label mb-2">Danh mục quỹ · sự kiện sớm · đề xuất có bằng chứng</p>
+                        <h1 class="display text-[30px] md:text-[40px] font-extrabold">Thu hẹp hàng trăm mã<br>còn một shortlist đáng giữ.</h1>
+                        <p class="lede mt-3 text-[14px]" style="color: var(--ink-soft)">Bắt đầu từ cổ phiếu các quỹ lớn đang nắm, theo dõi tin tức để bắt tín hiệu sớm, rồi đánh giá lại vị thế theo vòng đời — mọi quyết định đều lưu phiên bản và truy được bằng chứng.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 lg:justify-end">
+                        <button onclick="runIngestion()" class="btn btn-accent" id="btn-ingest">Nạp dữ liệu quỹ</button>
+                        <button onclick="runAnalysis()" class="btn btn-primary" id="btn-scan">Quét cơ hội</button>
                     </div>
                 </div>
-                <div class="flex items-center space-x-3">
-                    <span id="last-update" class="text-xs text-gray-500"></span>
-                    <button onclick="refreshAll()" class="btn btn-secondary">Làm mới</button>
+            </section>
+
+            <section class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5" aria-label="Chỉ số tổng quan">
+                <div class="card card-pad rise rise-1">
+                    <p class="label">Mã đang theo dõi</p>
+                    <p id="stat-watchlist" class="mono stat-num text-[30px] md:text-[36px] font-semibold mt-2">–</p>
+                    <p class="text-[12px] mt-1" style="color: var(--faint)">từ danh mục quỹ công khai</p>
                 </div>
-            </div>
+                <div class="card card-pad rise rise-2">
+                    <p class="label">Proposal đang mở</p>
+                    <p id="stat-proposals" class="mono stat-num text-[30px] md:text-[36px] font-semibold mt-2">–</p>
+                    <p class="text-[12px] mt-1" style="color: var(--faint)">có thesis + evidence</p>
+                </div>
+                <div class="card card-pad rise rise-3">
+                    <p class="label">Vị thế đang giữ</p>
+                    <p id="stat-positions" class="mono stat-num text-[30px] md:text-[36px] font-semibold mt-2">–</p>
+                    <p class="text-[12px] mt-1" style="color: var(--faint)">theo dõi thesis mỗi ngày</p>
+                </div>
+                <div class="card card-pad rise rise-4" style="background: var(--ink); border-color: var(--ink)">
+                    <p class="label" style="color: #9fb3a9">Tỉ lệ thắng</p>
+                    <p id="stat-winrate" class="mono stat-num text-[30px] md:text-[36px] font-semibold mt-2" style="color: #f2f5f1">–</p>
+                    <p class="text-[12px] mt-1" style="color: #9fb3a9">đo trên proposal đã chốt</p>
+                </div>
+            </section>
+
+            <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div class="lg:col-span-8 flex flex-col gap-5 min-w-0">
+                    <div class="card rise rise-2">
+                        <div class="card-head">
+                            <div>
+                                <p class="label">Ưu tiên hôm nay</p>
+                                <h2 class="text-[17px] font-bold mt-0.5" style="letter-spacing: -0.01em">Shortlist cơ hội</h2>
+                            </div>
+                            <a href="/shortlist" class="btn btn-ghost btn-sm">Xem tất cả</a>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="grid-table" id="shortlist-table">
+                                <thead>
+                                    <tr>
+                                        <th>Mã</th>
+                                        <th>Hành động</th>
+                                        <th>Vùng mua</th>
+                                        <th>Mục tiêu</th>
+                                        <th>Chặn lỗ</th>
+                                        <th>Chắc chắn</th>
+                                        <th>Luận điểm</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card rise rise-3">
+                        <div class="card-head">
+                            <div>
+                                <p class="label">Tiền của bạn</p>
+                                <h2 class="text-[17px] font-bold mt-0.5" style="letter-spacing: -0.01em">Danh mục đang giữ</h2>
+                            </div>
+                            <a href="/portfolio" class="btn btn-ghost btn-sm">Quản lý</a>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="grid-table" id="portfolio-table">
+                                <thead>
+                                    <tr>
+                                        <th>Mã</th>
+                                        <th>KL</th>
+                                        <th>Giá vốn</th>
+                                        <th>P&amp;L</th>
+                                        <th>Khuyến nghị</th>
+                                        <th>Thesis</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-4 flex flex-col gap-5 min-w-0">
+                    <div class="card card-pad rise rise-2">
+                        <p class="label">Vận hành</p>
+                        <h2 class="text-[17px] font-bold mt-0.5 mb-1" style="letter-spacing: -0.01em">Pipeline nền</h2>
+                        <p class="text-[13px] leading-relaxed mb-4" style="color: var(--ink-soft)">Nạp factsheet quỹ, tin RSS, rồi quét tác động lên tập mã theo dõi. Chạy thủ công tại đây hoặc để scheduler tự chạy.</p>
+                        <div id="job-status" class="mono text-[12px] mb-4" style="color: var(--muted)">Chưa chạy job nào trong phiên này.</div>
+                        <div class="flex flex-col gap-2">
+                            <button onclick="runIngestion()" class="btn btn-ghost btn-sm w-full">Nạp dữ liệu quỹ + tin</button>
+                            <button onclick="runAnalysis()" class="btn btn-ghost btn-sm w-full">Quét cơ hội mới</button>
+                            <button onclick="runReeval()" class="btn btn-ghost btn-sm w-full">Đánh giá lại danh mục</button>
+                        </div>
+                    </div>
+
+                    <div class="card rise rise-3">
+                        <div class="card-head">
+                            <div>
+                                <p class="label">Tín hiệu sớm</p>
+                                <h2 class="text-[17px] font-bold mt-0.5" style="letter-spacing: -0.01em">Sự kiện mới nhất</h2>
+                            </div>
+                            <a href="/events" class="btn btn-ghost btn-sm">Tất cả</a>
+                        </div>
+                        <div id="events-list" class="p-5 pt-4 flex flex-col gap-3"></div>
+                    </div>
+                </div>
+            </section>
         </div>
-    </nav>
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 py-6" id="main-content">
-        <!-- Dashboard View (default) -->
-        <div id="view-dashboard">
-            <div class="flex items-center justify-between mb-6">
-                <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <div class="flex space-x-2">
-                    <button onclick="runIngestion()" class="btn btn-primary">Chạy ingestion</button>
-                    <button onclick="runAnalysis()" class="btn btn-secondary">Chạy phân tích</button>
-                </div>
-            </div>
-
-            <!-- Stats Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="card p-6">
-                    <p class="text-sm text-gray-500">Tổng mã theo dõi</p>
-                    <p id="stat-watchlist" class="text-3xl font-bold text-gray-900">-</p>
-                </div>
-                <div class="card p-6">
-                    <p class="text-sm text-gray-500">Proposal ACTIVE</p>
-                    <p id="stat-proposals" class="text-3xl font-bold text-gray-900">-</p>
-                </div>
-                <div class="card p-6">
-                    <p class="text-sm text-gray-500">Vị thế đang giữ</p>
-                    <p id="stat-positions" class="text-3xl font-bold text-gray-900">-</p>
-                </div>
-                <div class="card p-6">
-                    <p class="text-sm text-gray-500">Tỷ lệ thắng</p>
-                    <p id="stat-winrate" class="text-3xl font-bold text-gray-900">-</p>
-                </div>
-            </div>
-
-            <!-- Shortlist Preview -->
-            <div class="card mb-6">
-                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                    <h2 class="text-lg font-semibold">Top Cơ Hội (Shortlist)</h2>
-                    <a href="/shortlist" class="text-sm text-indigo-600 hover:underline">Xem tất cả</a>
-                </div>
-                <div class="table-container">
-                    <table id="shortlist-table">
-                        <thead>
-                            <tr>
-                                <th>Mã</th>
-                                <th>Tên</th>
-                                <th>Quỹ nắm giữ</th>
-                                <th>Action</th>
-                                <th>Entry</th>
-                                <th>Target</th>
-                                <th>Stop</th>
-                                <th>Confidence</th>
-                                <th>Thesis (tóm tắt)</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Portfolio Preview -->
-            <div class="card mb-6">
-                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                    <h2 class="text-lg font-semibold">Danh Mục Đang Giữ</h2>
-                    <a href="/portfolio" class="text-sm text-indigo-600 hover:underline">Quản lý</a>
-                </div>
-                <div class="table-container">
-                    <table id="portfolio-table">
-                        <thead>
-                            <tr>
-                                <th>Mã</th>
-                                <th>SL</th>
-                                <th>Giá TB</th>
-                                <th>Giá Hiện Tại</th>
-                                <th>P&L</th>
-                                <th>P&L %</th>
-                                <th>Action Hiện Tại</th>
-                                <th>Thesis Health</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Latest Events -->
-            <div class="card">
-                <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                    <h2 class="text-lg font-semibold">Tin Tức & Sự Kiện Gần Đây</h2>
-                    <a href="/events" class="text-sm text-indigo-600 hover:underline">Xem tất cả</a>
-                </div>
-                <div id="events-list" class="p-6 space-y-3"></div>
-            </div>
-        </div>
-
-        <!-- Other Views (loaded via HTMX) -->
         <div id="view-shortlist" class="hidden"></div>
         <div id="view-portfolio" class="hidden"></div>
         <div id="view-events" class="hidden"></div>
         <div id="view-track-record" class="hidden"></div>
         <div id="view-settings" class="hidden"></div>
+
+        <footer class="mt-10 pb-6 flex flex-col md:flex-row gap-2 md:items-center md:justify-between text-[12px]" style="color: var(--faint)">
+            <p>Hệ thống hỗ trợ nghiên cứu, không phải khuyến nghị mua bán. Mọi con số tính toán đều truy được nguồn.</p>
+            <p class="mono">local-first · free baseline · point-in-time</p>
+        </footer>
     </main>
 
+    <div id="toast-root" aria-live="polite"></div>
+
     <script>
-        // Navigation handling
         const views = ['dashboard', 'shortlist', 'portfolio', 'events', 'track-record', 'settings'];
         const navLinks = {
             'dashboard': 'nav-dashboard',
@@ -168,52 +406,74 @@
             'settings': 'nav-settings'
         };
 
+        function toast(msg, isErr) {
+            const root = document.getElementById('toast-root');
+            const el = document.createElement('div');
+            el.className = 'toast' + (isErr ? ' err' : '');
+            el.textContent = msg;
+            root.appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 320); }, 3600);
+        }
+
+        function tagFor(action) {
+            const a = (action || '').toUpperCase();
+            const cls = a === 'BUY' || a === 'ADD' ? 'tag-buy'
+                : a === 'HOLD' ? 'tag-hold'
+                : a === 'WATCH' ? 'tag-watch'
+                : a === 'AVOID' ? 'tag-avoid'
+                : 'tag-sell';
+            return `<span class="tag ${cls}"><span class="dot"></span>${a}</span>`;
+        }
+
         function showView(view) {
             views.forEach(v => {
                 document.getElementById(`view-${v}`).classList.add('hidden');
             });
             document.getElementById(`view-${view}`).classList.remove('hidden');
-            
+
             Object.entries(navLinks).forEach(([v, id]) => {
-                const el = document.getElementById(id);
-                if (el) {
-                    if (v === view) {
-                        el.classList.add('active');
-                        el.classList.remove('text-gray-600', 'hover:bg-gray-100');
-                    } else {
-                        el.classList.remove('active');
-                        el.classList.add('text-gray-600', 'hover:bg-gray-100');
-                    }
-                }
+                [id, id + '-m'].forEach(nid => {
+                    const el = document.getElementById(nid);
+                    if (el) el.classList.toggle('active', v === view);
+                });
             });
-            
-            // Load view content
-            if (view !== 'dashboard') {
-                loadView(view);
+
+            if (view !== 'dashboard') loadView(view);
+            else loadDashboard();
+        }
+
+        function skeletonRows(cols, n) {
+            let h = '';
+            for (let i = 0; i < n; i++) {
+                h += `<tr>${'<td><div class="skel" style="height:14px"></div></td>'.repeat(cols)}</tr>`;
             }
+            return h;
         }
 
         function loadView(view) {
             const container = document.getElementById(`view-${view}`);
-            container.innerHTML = '<div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>';
-            
+            container.innerHTML = '<div class="card card-pad"><div class="skel mb-3" style="height:22px;width:38%"></div><div class="skel mb-2"></div><div class="skel mb-2"></div><div class="skel" style="width:70%"></div></div>';
+
             fetch(`/ui/${view}`)
                 .then(r => r.text())
-                .then(html => { container.innerHTML = html; })
-                .catch(e => { container.innerHTML = `<div class="p-6 text-red-600">Lỗi tải trang: ${e.message}</div>`; });
+                .then(html => { container.innerHTML = html; });
         }
 
-        // Navigation click handlers
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
-                const view = link.getAttribute('href').slice(1) || 'dashboard';
-                showView(view);
+                showView(link.getAttribute('href').slice(1) || 'dashboard');
             });
         });
 
-        // Dashboard data loading
         async function loadDashboard() {
+            const tbody = document.querySelector('#shortlist-table tbody');
+            const pbody = document.querySelector('#portfolio-table tbody');
+            if (tbody) tbody.innerHTML = skeletonRows(7, 4);
+            if (pbody) pbody.innerHTML = skeletonRows(6, 3);
+            const eventsDiv = document.getElementById('events-list');
+            if (eventsDiv) eventsDiv.innerHTML = '<div class="skel mb-2"></div><div class="skel mb-2"></div><div class="skel" style="width:60%"></div>';
+
             try {
                 const [stats, proposals, positions, events] = await Promise.all([
                     fetch('/api/track-record').then(r => r.json()),
@@ -222,61 +482,48 @@
                     fetch('/api/events?limit=5').then(r => r.json()),
                 ]);
 
-                // Stats
-                document.getElementById('stat-watchlist').textContent = stats.total_evaluated || 0;
+                document.getElementById('stat-watchlist').textContent = stats.total_evaluated || proposals.length || 0;
                 document.getElementById('stat-proposals').textContent = proposals.length;
                 document.getElementById('stat-positions').textContent = positions.length;
-                document.getElementById('stat-winrate').textContent = stats.win_rate + '%';
+                document.getElementById('stat-winrate').textContent = (stats.win_rate ?? 0) + '%';
 
-                // Shortlist table
-                const tbody = document.querySelector('#shortlist-table tbody');
                 tbody.innerHTML = proposals.map(p => `
-                    <tr class="hover:bg-gray-50">
-                        <td class="font-mono font-medium">${p.ticker}</td>
-                        <td>${p.thesis?.slice(0, 50)}...</td>
-                        <td>${getFundNames(p.evidence_refs)}</td>
-                        <td><span class="badge badge-${p.action.toLowerCase()}">${p.action}</span></td>
-                        <td>${formatPriceRange(p.entry_min, p.entry_max)}</td>
-                        <td>${formatPriceRange(p.target_min, p.target_max)}</td>
-                        <td>${p.stop_reference ? p.stop_reference.toLocaleString() : '-'}</td>
-                        <td>${p.confidence}%</td>
-                        <td class="max-w-xs truncate">${p.thesis?.slice(0, 80)}...</td>
+                    <tr>
+                        <td class="mono font-semibold">${p.ticker}</td>
+                        <td>${tagFor(p.action)}</td>
+                        <td class="mono tnum whitespace-nowrap">${formatPriceRange(p.entry_min, p.entry_max)}</td>
+                        <td class="mono tnum whitespace-nowrap">${formatPriceRange(p.target_min, p.target_max)}</td>
+                        <td class="mono tnum whitespace-nowrap">${p.stop_reference ? p.stop_reference.toLocaleString() : '–'}</td>
+                        <td class="mono tnum">${p.confidence}%</td>
+                        <td class="max-w-[260px]"><span class="block truncate" title="${(p.thesis || '').replace(/"/g, '&quot;')}">${p.thesis || ''}</span></td>
                     </tr>
-                `).join('') || '<tr><td colspan="9" class="text-center py-8 text-gray-500">Chưa có proposal ACTIVE</td></tr>';
+                `).join('') || `<tr><td colspan="7"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có proposal đang mở</p><p class="text-[13px]">Chạy “Quét cơ hội” để tạo đề xuất đầu tiên.</p></div></td></tr>`;
 
-                // Portfolio table
-                const pbody = document.querySelector('#portfolio-table tbody');
                 pbody.innerHTML = positions.map(p => {
-                    // Current price would need market data - placeholder
-                    const pnl = 0; // placeholder
+                    const pnl = 0;
                     return `
-                        <tr class="hover:bg-gray-50">
-                            <td class="font-mono font-medium">${p.ticker}</td>
-                            <td>${p.quantity.toLocaleString()}</td>
-                            <td>${p.avg_buy_price.toLocaleString()}</td>
-                            <td>-</td>
-                            <td class="${pnl >= 0 ? 'text-green-600' : 'text-red-600'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
-                            <td class="${pnl >= 0 ? 'text-green-600' : 'text-red-600'}">${pnl >= 0 ? '+' : ''}0.0%</td>
-                            <td><span class="badge badge-${p.current_action.toLowerCase()}">${p.current_action}</span></td>
-                            <td><span class="badge ${p.thesis_health === 'HEALTHY' ? 'badge-buy' : p.thesis_health === 'AT_RISK' ? 'badge-watch' : 'badge-sell'}">${p.thesis_health}</span></td>
+                        <tr>
+                            <td class="mono font-semibold">${p.ticker}</td>
+                            <td class="mono tnum">${p.quantity.toLocaleString()}</td>
+                            <td class="mono tnum">${p.avg_buy_price.toLocaleString()}</td>
+                            <td class="mono tnum ${pnl >= 0 ? '' : ''}" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
+                            <td>${tagFor(p.current_action)}</td>
+                            <td><span class="tag ${p.thesis_health === 'HEALTHY' ? 'tag-buy' : p.thesis_health === 'AT_RISK' ? 'tag-hold' : 'tag-sell'}"><span class="dot"></span>${p.thesis_health}</span></td>
                         </tr>
                     `;
-                }).join('') || '<tr><td colspan="8" class="text-center py-8 text-gray-500">Chưa có vị thế</td></tr>';
+                }).join('') || `<tr><td colspan="6"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có vị thế nào</p><p class="text-[13px]">Thêm vị thế đầu tiên trong trang Danh mục.</p></div></td></tr>`;
 
-                // Events
-                const eventsDiv = document.getElementById('events-list');
                 eventsDiv.innerHTML = events.map(e => `
-                    <div class="evidence-item">
-                        <div class="flex justify-between">
-                            <span class="font-medium">${e.headline}</span>
-                            <span class="text-xs text-gray-500">${new Date(e.occurred_at).toLocaleString('vi-VN')}</span>
+                    <article class="evidence">
+                        <div class="flex items-center gap-2 text-[11px] mono" style="color:var(--faint)">
+                            <span>${e.source_name || ''}</span><span>·</span><span>${new Date(e.occurred_at).toLocaleString('vi-VN')}</span>
                         </div>
-                        <div class="text-sm text-gray-600 mt-1">${e.summary || ''}</div>
-                        <div class="flex gap-2 mt-2">
-                            ${(e.entities || []).map(t => `<span class="badge badge-watch">${t}</span>`).join('')}
+                        <p class="text-[13.5px] font-semibold mt-1 leading-snug" style="text-wrap:balance">${e.headline}</p>
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            ${(e.entities || []).map(t => `<span class="fund-chip">${t}</span>`).join('')}
                         </div>
-                    </div>
-                `).join('') || '<p class="text-gray-500 text-center py-4">Chưa có sự kiện</p>';
+                    </article>
+                `).join('') || '<div class="empty"><div class="glyph">◌</div><p class="text-[13px]">Chưa có sự kiện. Nạp tin tức để bắt tín hiệu sớm.</p></div>';
 
             } catch (e) {
                 console.error('Dashboard load error:', e);
@@ -284,7 +531,7 @@
         }
 
         function getFundNames(evidenceRefs) {
-            if (!evidenceRefs || !evidenceRefs.length) return '-';
+            if (!evidenceRefs || !evidenceRefs.length) return '–';
             const funds = new Set();
             evidenceRefs.forEach(ref => {
                 if (ref.startsWith('VEIL')) funds.add('VEIL');
@@ -296,30 +543,45 @@
         }
 
         function formatPriceRange(min, max) {
-            if (!min && !max) return '-';
-            if (min && max) return `${min.toLocaleString()} - ${max.toLocaleString()}`;
+            if (!min && !max) return '–';
+            if (min && max) return `${min.toLocaleString()} – ${max.toLocaleString()}`;
             return (min || max).toLocaleString();
         }
 
-        async function refreshAll() {
-            await loadDashboard();
+        function setJobStatus(msg) {
+            const el = document.getElementById('job-status');
+            if (el) el.textContent = msg;
         }
 
-        async function runIngestion() {
-            alert('Chạy ingestion... (chưa implement)');
+        async function runJob(path, label, btnId) {
+            const btn = btnId ? document.getElementById(btnId) : null;
+            if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+            setJobStatus(`Đang chạy: ${label}…`);
+            try {
+                const r = await fetch(path, { method: 'POST' });
+                const data = await r.json();
+                setJobStatus(`Xong: ${label} · ${new Date().toLocaleTimeString('vi-VN')}`);
+                toast(`${label} hoàn tất`);
+                await loadDashboard();
+                return data;
+            } catch (e) {
+                setJobStatus(`Lỗi job: ${label}`);
+                toast(`${label} thất bại: ${e.message}`, true);
+            } finally {
+                if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+            }
         }
 
-        async function runAnalysis() {
-            alert('Chạy phân tích... (chưa implement)');
-        }
+        async function refreshAll() { await loadDashboard(); toast('Đã làm mới dữ liệu'); }
+        async function runIngestion() { await runJob('/api/jobs/ingestion', 'Nạp dữ liệu quỹ + tin', 'btn-ingest'); }
+        async function runAnalysis() { await runJob('/api/jobs/opportunity-scan', 'Quét cơ hội', 'btn-scan'); }
+        async function runReeval() { await runJob('/api/jobs/portfolio-reeval', 'Đánh giá lại danh mục'); }
 
-        // Initial load
         loadDashboard();
-        
-        // Update timestamp
+
         setInterval(() => {
-            document.getElementById('last-update').textContent = 
-                'Cập nhật: ' + new Date().toLocaleString('vi-VN');
+            document.getElementById('last-update').textContent =
+                'cập nhật ' + new Date().toLocaleString('vi-VN');
         }, 1000);
     </script>
 </body>

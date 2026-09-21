@@ -1,130 +1,128 @@
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Cài Đặt Hệ Thống</h1>
+<div class="mb-5">
+    <p class="label">Vận hành local-first</p>
+    <h1 class="display text-[26px] md:text-[34px] font-extrabold mt-1">Cài đặt hệ thống</h1>
+    <p class="text-[13.5px] mt-1" style="color: var(--ink-soft)">Nguồn dữ liệu, model miễn phí và lịch chạy nền — mọi thứ chạy trên máy bạn.</p>
 </div>
 
-<div class="space-y-6">
-    <!-- Fund Data Sources -->
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-4">Nguồn Dữ Liệu Quỹ</h2>
-        <div class="space-y-4">
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card card-pad">
+        <p class="label">Nguồn dữ liệu quỹ</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">Factsheet công khai</h2>
+        <div class="flex flex-col gap-2.5">
+            <div class="evidence flex items-center justify-between gap-3">
                 <div>
-                    <h3 class="font-medium">VEIL (Dragon Capital)</h3>
-                    <p class="text-sm text-gray-500">Factsheet PDF hàng tháng • Đóng góp top 10</p>
+                    <p class="text-[13.5px] font-semibold">VEIL · Dragon Capital</p>
+                    <p class="text-[12px]" style="color:var(--muted)">Factsheet PDF hàng tháng · top 10</p>
                 </div>
-                <span class="badge badge-buy">Hoạt động</span>
+                <span class="tag tag-buy"><span class="dot"></span>Hoạt động</span>
             </div>
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div class="evidence flex items-center justify-between gap-3">
                 <div>
-                    <h3 class="font-medium">VESAF (VinaCapital)</h3>
-                    <p class="text-sm text-gray-500">Factsheet PDF hàng tháng • Top 10 & Commentary</p>
+                    <p class="text-[13.5px] font-semibold">VESAF · VinaCapital</p>
+                    <p class="text-[12px]" style="color:var(--muted)">Factsheet PDF hàng tháng · top 10 + bình luận</p>
                 </div>
-                <span class="badge badge-buy">Hoạt động</span>
+                <span class="tag tag-buy"><span class="dot"></span>Hoạt động</span>
             </div>
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div class="evidence flex items-center justify-between gap-3">
                 <div>
-                    <h3 class="font-medium">VCBF-BCF (VCBF)</h3>
-                    <p class="text-sm text-gray-500">Factsheet PDF hàng tháng • Top 5</p>
+                    <p class="text-[13.5px] font-semibold">VCBF-BCF · VCBF</p>
+                    <p class="text-[12px]" style="color:var(--muted)">Factsheet PDF hàng tháng · top 5</p>
                 </div>
-                <span class="badge badge-buy">Hoạt động</span>
+                <span class="tag tag-buy"><span class="dot"></span>Hoạt động</span>
             </div>
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div class="evidence flex items-center justify-between gap-3">
                 <div>
-                    <h3 class="font-medium">PYN Elite</h3>
-                    <p class="text-sm text-gray-500">Website HTML portfolio • Cần verify snapshot</p>
+                    <p class="text-[13.5px] font-semibold">PYN Elite</p>
+                    <p class="text-[12px]" style="color:var(--muted)">Website portfolio · cần verify snapshot theo kỳ</p>
                 </div>
-                <span class="badge badge-watch">Chờ xác minh</span>
+                <span class="tag tag-hold"><span class="dot"></span>Chờ xác minh</span>
             </div>
         </div>
     </div>
 
-    <!-- LLM Provider Configuration -->
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-4">Cấu Hình Mô Hình Ngôn Ngữ (LLM)</h2>
-        <div class="space-y-4">
+    <div class="card card-pad">
+        <p class="label">Mô hình ngôn ngữ</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">OpenCode · free tier</h2>
+        <div class="flex flex-col gap-3">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Provider Hiện Tại</label>
-                <input type="text" value="OpenCode CLI (Local-First)" disabled class="input bg-gray-50">
+                <label class="field">Provider hiện tại</label>
+                <input type="text" value="OpenCode CLI · local-first" disabled class="input" style="background:#f0f3ef">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Mô Hình Khuyến Nghị (Free Tier)</label>
-                <select id="setting-llm-model" class="input">
-                    <option value="opencode/big-pickle">opencode/big-pickle (Free, Stealth)</option>
-                    <option value="opencode/mimo-v2.5-free">opencode/mimo-v2.5-free (Free)</option>
-                    <option value="opencode/nemotron-3-ultra-free">opencode/nemotron-3-ultra-free (Free)</option>
-                    <option value="ollama/local">Ollama Local (Offline, Yêu cầu GPU/RAM)</option>
+                <label class="field" for="setting-llm-model">Model khuyến nghị</label>
+                <select id="setting-llm-model" class="input" style="width:100%">
+                    <option value="opencode/big-pickle">opencode/big-pickle · miễn phí</option>
+                    <option value="opencode/mimo-v2.5-free">opencode/mimo-v2.5-free · miễn phí</option>
+                    <option value="opencode/nemotron-3-ultra-free">opencode/nemotron-3-ultra-free · miễn phí</option>
+                    <option value="ollama/local">Ollama local · offline</option>
                 </select>
             </div>
-            <div>
-                <button onclick="testLLMConnection()" class="btn btn-secondary">Kiểm Tra Kết Nối Model</button>
-                <span id="llm-status" class="ml-2 text-sm"></span>
+            <div class="flex items-center gap-3">
+                <button onclick="testLLMConnection()" class="btn btn-ghost btn-sm" id="btn-test-llm">Kiểm tra kết nối</button>
+                <span id="llm-status" class="text-[12.5px]" style="color:var(--muted)">Chưa kiểm tra trong phiên này.</span>
             </div>
         </div>
     </div>
 
-    <!-- Market Data Provider -->
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-4">Nguồn Dữ Liệu Thị Trường</h2>
-        <div class="space-y-4">
+    <div class="card card-pad">
+        <p class="label">Dữ liệu thị trường</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">Giá · BCTC · tỉ số</h2>
+        <div class="flex flex-col gap-3">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Provider Dữ Liệu Giá / BCTC</label>
-                <input type="text" value="vnstock 4.0.8 (KBS Source, Guest Mode: 60 req/min)" disabled class="input bg-gray-50">
+                <label class="field">Provider chính</label>
+                <input type="text" value="vnstock 4.0.8 · nguồn KBS · guest 60 req/phút" disabled class="input" style="background:#f0f3ef">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Dự Phòng (Fallback)</label>
-                <input type="text" value="File CSV Cục Bộ / Nhập Bằng Tay" disabled class="input bg-gray-50">
+                <label class="field">Dự phòng</label>
+                <input type="text" value="CSV thủ công có provenance" disabled class="input" style="background:#f0f3ef">
             </div>
         </div>
     </div>
 
-    <!-- Scheduler Configuration -->
-    <div class="card p-6">
-        <h2 class="text-lg font-semibold mb-4">Lịch Trình Tự Động (Background Scheduler)</h2>
-        <div class="space-y-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="font-medium">Tự động nạp tin tức RSS</h3>
-                    <p class="text-sm text-gray-500">Mỗi 60 phút</p>
-                </div>
-                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5">
-            </div>
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="font-medium">Tự động đánh giá lại Portfolio</h3>
-                    <p class="text-sm text-gray-500">Mỗi 120 phút (khi có sự kiện mới)</p>
-                </div>
-                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5">
-            </div>
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="font-medium">Kiểm tra factsheet quỹ mới</h3>
-                    <p class="text-sm text-gray-500">Hàng ngày lúc 08:00</p>
-                </div>
-                <input type="checkbox" checked class="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5">
-            </div>
+    <div class="card card-pad">
+        <p class="label">Lịch chạy nền</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">Scheduler trên máy bạn</h2>
+        <div class="flex flex-col gap-3">
+            <label class="evidence flex items-center justify-between gap-3 cursor-pointer">
+                <span><span class="block text-[13.5px] font-semibold">Nạp tin tức RSS</span><span class="block text-[12px] mono" style="color:var(--muted)">mỗi 60 phút</span></span>
+                <input type="checkbox" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            </label>
+            <label class="evidence flex items-center justify-between gap-3 cursor-pointer">
+                <span><span class="block text-[13.5px] font-semibold">Đánh giá lại danh mục</span><span class="block text-[12px] mono" style="color:var(--muted)">mỗi 120 phút khi có sự kiện</span></span>
+                <input type="checkbox" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            </label>
+            <label class="evidence flex items-center justify-between gap-3 cursor-pointer">
+                <span><span class="block text-[13.5px] font-semibold">Kiểm tra factsheet mới</span><span class="block text-[12px] mono" style="color:var(--muted)">hàng ngày 08:00</span></span>
+                <input type="checkbox" checked style="width:18px;height:18px;accent-color:var(--accent)">
+            </label>
         </div>
     </div>
 </div>
 
 <script>
 async function testLLMConnection() {
+    const btn = document.getElementById('btn-test-llm');
     const statusEl = document.getElementById('llm-status');
-    statusEl.textContent = 'Đang kiểm tra...';
-    statusEl.className = 'text-gray-500 ml-2 text-sm';
-    
+    statusEl.textContent = 'Đang kiểm tra…';
+    if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+
     try {
         const res = await fetch('/api/test-llm', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
-            statusEl.textContent = 'Kết nối thành công! (Phản hồi tốt)';
-            statusEl.className = 'text-green-600 ml-2 text-sm';
+            statusEl.textContent = 'Kết nối tốt — model phản hồi bình thường.';
+            statusEl.style.color = 'var(--accent-ink)';
+            toast('Kết nối model thành công');
         } else {
             statusEl.textContent = 'Lỗi: ' + data.error;
-            statusEl.className = 'text-red-600 ml-2 text-sm';
+            statusEl.style.color = 'var(--danger)';
+            toast('Kết nối model thất bại', true);
         }
     } catch (e) {
         statusEl.textContent = 'Lỗi kết nối: ' + e.message;
-        statusEl.className = 'text-red-600 ml-2 text-sm';
+        statusEl.style.color = 'var(--danger)';
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
     }
 }
 </script>

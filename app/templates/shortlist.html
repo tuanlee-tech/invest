@@ -1,16 +1,20 @@
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Shortlist Cơ Hội</h1>
-    <div class="flex space-x-2">
-        <button onclick="runOpportunityScan()" class="btn btn-primary">Quét cơ hội mới</button>
-        <select id="filter-fund" class="input w-auto" onchange="loadShortlist()">
+<div class="flex flex-col md:flex-row md:items-end gap-4 mb-5">
+    <div class="flex-1 min-w-0">
+        <p class="label">Tập mã từ danh mục quỹ</p>
+        <h1 class="display text-[26px] md:text-[34px] font-extrabold mt-1">Shortlist cơ hội</h1>
+        <p class="text-[13.5px] mt-1" style="color: var(--ink-soft)">Mỗi dòng là một proposal có phiên bản, truy được thesis và bằng chứng.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+        <button onclick="runOpportunityScan()" class="btn btn-accent btn-sm" id="btn-shortlist-scan">Quét cơ hội mới</button>
+        <select id="filter-fund" class="input" onchange="loadShortlist()" aria-label="Lọc theo quỹ">
             <option value="">Tất cả quỹ</option>
             <option value="VEIL">VEIL</option>
             <option value="VESAF">VESAF</option>
             <option value="VCBF-BCF">VCBF-BCF</option>
             <option value="PYN">PYN</option>
         </select>
-        <select id="filter-action" class="input w-auto" onchange="loadShortlist()">
-            <option value="">Tất cả action</option>
+        <select id="filter-action" class="input" onchange="loadShortlist()" aria-label="Lọc theo hành động">
+            <option value="">Mọi hành động</option>
             <option value="BUY">BUY</option>
             <option value="WATCH">WATCH</option>
             <option value="AVOID">AVOID</option>
@@ -19,24 +23,22 @@
 </div>
 
 <div class="card">
-    <div class="table-container">
-        <table id="shortlist-full-table">
+    <div class="table-scroll">
+        <table class="grid-table" id="shortlist-full-table">
             <thead>
                 <tr>
                     <th>Mã</th>
-                    <th>Action</th>
-                    <th>Entry Zone</th>
-                    <th>Target</th>
-                    <th>Stop</th>
-                    <th>Horizon</th>
-                    <th>Confidence</th>
-                    <th>Position %</th>
-                    <th>Thesis</th>
-                    <th>Catalysts</th>
-                    <th>Risks</th>
-                    <th>Evidence</th>
-                    <th>Version</th>
                     <th>Hành động</th>
+                    <th>Vùng mua</th>
+                    <th>Mục tiêu</th>
+                    <th>Chặn lỗ</th>
+                    <th>Kỳ hạn</th>
+                    <th>Chắc chắn</th>
+                    <th>Tỉ trọng</th>
+                    <th>Luận điểm</th>
+                    <th>Bằng chứng</th>
+                    <th>Phiên bản</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -44,13 +46,13 @@
     </div>
 </div>
 
-<div id="proposal-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 class="text-xl font-bold" id="modal-title">Chi tiết Proposal</h2>
-            <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+<div id="proposal-detail-modal" class="fixed inset-0 modal-veil hidden items-center justify-center z-50 p-4">
+    <div class="modal-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto" style="background: var(--surface); border: 1px solid var(--line); border-radius: 20px">
+        <div class="card-head" style="position: sticky; top: 0; background: var(--surface)">
+            <h2 class="text-[18px] font-bold" id="modal-title" style="letter-spacing: -0.01em">Chi tiết proposal</h2>
+            <button onclick="closeModal()" class="btn btn-ghost btn-sm" aria-label="Đóng">Đóng</button>
         </div>
-        <div class="p-6" id="modal-content"></div>
+        <div class="card-pad" id="modal-content"></div>
     </div>
 </div>
 
@@ -61,38 +63,38 @@ async function loadShortlist() {
     let url = '/api/proposals?status=ACTIVE&limit=100';
     if (fund) url += `&fund=${fund}`;
     if (action) url += `&action=${action}`;
-    
+
+    const tbody = document.querySelector('#shortlist-full-table tbody');
+    tbody.innerHTML = skeletonRows(12, 5);
+
     try {
         const proposals = await fetch(url).then(r => r.json());
-        const tbody = document.querySelector('#shortlist-full-table tbody');
         tbody.innerHTML = proposals.map(p => `
-            <tr class="hover:bg-gray-50 cursor-pointer" onclick="openProposalDetail('${p.id}')">
-                <td class="font-mono font-medium">${p.ticker}</td>
-                <td><span class="badge badge-${p.action.toLowerCase()}">${p.action}</span></td>
-                <td>${formatPriceRange(p.entry_min, p.entry_max)}</td>
-                <td>${formatPriceRange(p.target_min, p.target_max)}</td>
-                <td>${p.stop_reference ? p.stop_reference.toLocaleString() : '-'}</td>
-                <td>${p.horizon_days} ngày</td>
-                <td>${p.confidence}%</td>
-                <td>${p.position_size_suggestion || 0}%</td>
-                <td class="max-w-xs truncate" title="${p.thesis}">${p.thesis.slice(0, 60)}...</td>
-                <td class="max-w-xs truncate">${(p.catalysts || []).join(', ').slice(0, 60)}...</td>
-                <td class="max-w-xs truncate">${(p.risks || []).join(', ').slice(0, 60)}...</td>
-                <td>${(p.evidence_refs || []).length} refs</td>
-                <td>v${p.version}</td>
+            <tr class="cursor-pointer" onclick="openProposalDetail('${p.id}')">
+                <td class="mono font-semibold">${p.ticker}</td>
+                <td>${tagFor(p.action)}</td>
+                <td class="mono tnum whitespace-nowrap">${formatPriceRange(p.entry_min, p.entry_max)}</td>
+                <td class="mono tnum whitespace-nowrap">${formatPriceRange(p.target_min, p.target_max)}</td>
+                <td class="mono tnum whitespace-nowrap">${p.stop_reference ? p.stop_reference.toLocaleString() : '–'}</td>
+                <td class="mono tnum whitespace-nowrap">${p.horizon_days} ngày</td>
+                <td class="mono tnum">${p.confidence}%</td>
+                <td class="mono tnum">${p.position_size_suggestion || 0}%</td>
+                <td class="max-w-[280px]"><span class="block truncate" title="${(p.thesis || '').replace(/"/g, '&quot;')}">${p.thesis || ''}</span></td>
+                <td class="mono tnum">${(p.evidence_refs || []).length} refs</td>
+                <td class="mono">v${p.version}</td>
                 <td>
-                    <button onclick="event.stopPropagation(); addToWatchlist('${p.ticker}')" class="btn btn-secondary text-xs px-2 py-1">Watchlist</button>
+                    <button onclick="event.stopPropagation(); addToWatchlist('${p.ticker}')" class="btn btn-ghost btn-sm">+ Theo dõi</button>
                 </td>
             </tr>
-        `).join('') || '<tr><td colspan="14" class="text-center py-8 text-gray-500">Không có proposal phù hợp</td></tr>';
+        `).join('') || `<tr><td colspan="12"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Không có proposal phù hợp</p><p class="text-[13px]">Nới bộ lọc hoặc chạy quét cơ hội mới.</p></div></td></tr>`;
     } catch (e) {
-        console.error(e);
+        tbody.innerHTML = `<tr><td colspan="12"><div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được shortlist: ${e.message}</p></div></td></tr>`;
     }
 }
 
 function formatPriceRange(min, max) {
-    if (!min && !max) return '-';
-    if (min && max) return `${min.toLocaleString()} - ${max.toLocaleString()}`;
+    if (!min && !max) return '–';
+    if (min && max) return `${min.toLocaleString()} – ${max.toLocaleString()}`;
     return (min || max).toLocaleString();
 }
 
@@ -101,78 +103,61 @@ async function openProposalDetail(proposalId) {
     const content = document.getElementById('modal-content');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
-    content.innerHTML = '<div class="flex justify-center py-12"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>';
-    
+    content.innerHTML = '<div class="skel mb-3" style="height:22px;width:40%"></div><div class="skel mb-2"></div><div class="skel mb-2"></div><div class="skel" style="width:70%"></div>';
+
     try {
         const p = await fetch(`/api/proposals/${proposalId}`).then(r => r.json());
-        document.getElementById('modal-title').textContent = `${p.ticker} - ${p.action} v${p.version}`;
-        
+        document.getElementById('modal-title').textContent = `${p.ticker} · ${p.action} · v${p.version}`;
+
+        const list = (arr) => (arr || []).map(c => `<li>${c}</li>`).join('');
+        const inv = (arr) => (arr || []).map(c => `<li>${c.description} <span class="mono text-[11px]" style="color:var(--faint)">· ${c.severity}</span></li>`).join('');
+
         content.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Thesis</h3>
-                    <p class="text-gray-700 whitespace-pre-wrap">${p.thesis}</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div class="md:col-span-2 evidence">
+                    <p class="label mb-1">Luận điểm</p>
+                    <p class="text-[14px] leading-relaxed whitespace-pre-wrap" style="max-width:68ch">${p.thesis}</p>
                 </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Entry Zone</h3>
-                    <p>${formatPriceRange(p.entry_min, p.entry_max)}</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Target</h3>
-                    <p>${formatPriceRange(p.target_min, p.target_max)}</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Stop Loss</h3>
-                    <p>${p.stop_reference ? p.stop_reference.toLocaleString() + ' (' + p.stop_method + ')' : 'Chưa xác định'}</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Horizon</h3>
-                    <p>${p.horizon_days} ngày</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Confidence</h3>
-                    <p>${p.confidence}%</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Position Size</h3>
-                    <p>${p.position_size_suggestion || 0}% portfolio</p>
-                </div>
-                <div>
-                    <h3 class="font-semibold text-gray-900 mb-2">Valid</h3>
-                    <p>${new Date(p.valid_from).toLocaleDateString('vi-VN')} → ${new Date(p.valid_until).toLocaleDateString('vi-VN')}</p>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Catalysts</h3>
-                    <ul class="list-disc list-inside text-gray-700">${(p.catalysts || []).map(c => `<li>${c}</li>`).join('')}</ul>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Risks</h3>
-                    <ul class="list-disc list-inside text-gray-700">${(p.risks || []).map(r => `<li>${r}</li>`).join('')}</ul>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Invalidation Conditions</h3>
-                    <ul class="list-disc list-inside text-gray-700">${(p.invalidation_conditions || []).map(c => `<li>${c.description} (${c.severity})</li>`).join('')}</ul>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Evidence References</h3>
-                    <ul class="list-disc list-inside text-gray-700">${(p.evidence_refs || []).map(e => `<li>${e}</li>`).join('')}</ul>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Reasoning Summary</h3>
-                    <p class="text-gray-700 whitespace-pre-wrap">${p.reasoning_summary || 'N/A'}</p>
-                </div>
-                <div class="md:col-span-2">
-                    <h3 class="font-semibold text-gray-900 mb-2">Changed from Previous</h3>
-                    <p class="text-gray-700 whitespace-pre-wrap">${p.changed_from_previous || 'Initial proposal'}</p>
-                </div>
+                <div><p class="label mb-1">Vùng mua</p><p class="mono tnum font-semibold">${formatPriceRange(p.entry_min, p.entry_max)}</p></div>
+                <div><p class="label mb-1">Mục tiêu</p><p class="mono tnum font-semibold">${formatPriceRange(p.target_min, p.target_max)}</p></div>
+                <div><p class="label mb-1">Chặn lỗ</p><p class="mono tnum">${p.stop_reference ? p.stop_reference.toLocaleString() + ' · ' + p.stop_method : 'Chưa xác định'}</p></div>
+                <div><p class="label mb-1">Kỳ hạn / hiệu lực</p><p class="text-[13.5px]">${p.horizon_days} ngày · ${new Date(p.valid_from).toLocaleDateString('vi-VN')} → ${new Date(p.valid_until).toLocaleDateString('vi-VN')}</p></div>
+                <div><p class="label mb-1">Chắc chắn</p><p class="mono tnum font-semibold">${p.confidence}%</p></div>
+                <div><p class="label mb-1">Tỉ trọng gợi ý</p><p class="mono tnum">${p.position_size_suggestion || 0}% danh mục</p></div>
+                <div class="md:col-span-2"><p class="label mb-1">Chất xúc tác</p><ul class="list-disc list-inside text-[13.5px] leading-relaxed" style="color:var(--ink-soft)">${list(p.catalysts)}</ul></div>
+                <div class="md:col-span-2"><p class="label mb-1">Rủi ro</p><ul class="list-disc list-inside text-[13.5px] leading-relaxed" style="color:var(--ink-soft)">${list(p.risks)}</ul></div>
+                <div class="md:col-span-2"><p class="label mb-1">Điều kiện vô hiệu</p><ul class="list-disc list-inside text-[13.5px] leading-relaxed" style="color:var(--ink-soft)">${inv(p.invalidation_conditions)}</ul></div>
+                <div class="md:col-span-2"><p class="label mb-1">Bằng chứng</p><div class="flex flex-wrap gap-1.5">${(p.evidence_refs || []).map(e => `<span class="fund-chip">${e}</span>`).join('') || '<span class="text-[13px]" style="color:var(--faint)">Chưa gắn evidence</span>'}</div></div>
+                <div class="md:col-span-2"><p class="label mb-1">Thay đổi so với phiên bản trước</p><p class="text-[13.5px] whitespace-pre-wrap" style="color:var(--ink-soft)">${p.changed_from_previous || 'Proposal khởi tạo'}</p></div>
             </div>
-            <div class="mt-6 pt-6 border-t border-gray-200 flex justify-end space-x-3">
-                <button onclick="reviseProposal('${p.id}')" class="btn btn-primary">Tạo Revision</button>
-                <button onclick="addToWatchlist('${p.ticker}')" class="btn btn-secondary">Thêm Watchlist</button>
-            </div>
+            <form id="revise-form" class="mt-6 pt-5 grid grid-cols-1 md:grid-cols-2 gap-4" style="border-top:1px solid var(--line)" onsubmit="submitRevision(event, '${p.id}')">
+                <p class="label md:col-span-2">Tạo revision mới — giữ nguyên lịch sử, không ghi đè</p>
+                <div>
+                    <label class="field" for="rev-action">Hành động mới</label>
+                    <select id="rev-action" class="input">
+                        ${['BUY','WATCH','AVOID','HOLD','ADD','REDUCE','EXIT'].map(a => `<option ${a === p.action ? 'selected' : ''}>${a}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="field" for="rev-conf">Chắc chắn (0–100)</label>
+                    <input id="rev-conf" type="number" min="0" max="100" class="input mono" value="${p.confidence}">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="field" for="rev-thesis">Luận điểm cập nhật</label>
+                    <textarea id="rev-thesis" class="input" rows="3" required>${p.thesis || ''}</textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="field" for="rev-changed">Lý do thay đổi (bắt buộc)</label>
+                    <input id="rev-changed" class="input" required placeholder="Ví dụ: giá chạm mục tiêu nhưng thesis còn mạnh nên nâng target">
+                </div>
+                <div class="md:col-span-2 flex justify-end gap-2">
+                    <button type="button" onclick="addToWatchlist('${p.ticker}')" class="btn btn-ghost btn-sm">+ Theo dõi mã</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Lưu revision v${p.version + 1}</button>
+                </div>
+            </form>
         `;
     } catch (e) {
-        content.innerHTML = `<div class="text-red-600">Lỗi tải chi tiết: ${e.message}</div>`;
+        content.innerHTML = `<div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được chi tiết: ${e.message}</p></div>`;
     }
 }
 
@@ -182,45 +167,54 @@ function closeModal() {
 }
 
 async function addToWatchlist(ticker) {
-    await fetch('/api/watchlist', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ticker})
-    });
-    alert(`Đã thêm ${ticker} vào watchlist`);
+    try {
+        await fetch('/api/watchlist', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ticker})
+        });
+        toast(`Đã thêm ${ticker} vào danh sách theo dõi`);
+    } catch (e) {
+        toast(`Không thêm được ${ticker}: ${e.message}`, true);
+    }
 }
 
-async function reviseProposal(proposalId) {
-    const p = await fetch(`/api/proposals/${proposalId}`).then(r => r.json());
-    const newAction = prompt('Action mới (BUY/HOLD/REDUCE/EXIT/ADD/WATCH/AVOID):', p.action);
-    if (!newAction) return;
-    
-    const newThesis = prompt('Thesis cập nhật:', p.thesis);
-    if (!newThesis) return;
-    
-    const newConfidence = prompt('Confidence (0-100):', p.confidence);
-    if (!newConfidence) return;
-    
-    const changed = prompt('Lý do thay đổi:', '');
-    if (!changed) return;
-    
-    await fetch(`/api/proposals/${proposalId}/revise`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            action: newAction,
-            thesis: newThesis,
-            confidence: parseFloat(newConfidence),
-            changed_from_previous: changed
-        })
-    });
-    closeModal();
-    loadShortlist();
-    alert('Đã tạo revision mới');
+async function submitRevision(e, proposalId) {
+    e.preventDefault();
+    const payload = {
+        action: document.getElementById('rev-action').value,
+        thesis: document.getElementById('rev-thesis').value,
+        confidence: parseFloat(document.getElementById('rev-conf').value),
+        changed_from_previous: document.getElementById('rev-changed').value
+    };
+    if (!payload.changed_from_previous.trim()) { toast('Cần ghi lý do thay đổi', true); return; }
+    try {
+        const r = await fetch(`/api/proposals/${proposalId}/revise`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeModal();
+        await loadShortlist();
+        toast('Đã lưu revision mới, lịch sử cũ được giữ nguyên');
+    } catch (err) {
+        toast('Tạo revision thất bại: ' + err.message, true);
+    }
 }
 
 async function runOpportunityScan() {
-    alert('Chạy opportunity scan... (chưa implement engine)');
+    const btn = document.getElementById('btn-shortlist-scan');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+    try {
+        await fetch('/api/jobs/opportunity-scan', { method: 'POST' });
+        toast('Quét cơ hội hoàn tất');
+        await loadShortlist();
+    } catch (e) {
+        toast('Quét cơ hội thất bại: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
 }
 
 loadShortlist();

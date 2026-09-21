@@ -1,76 +1,73 @@
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Track Record & Đánh Giá Hiệu Quả</h1>
-    <button onclick="runEvaluation()" class="btn btn-secondary">Chạy Đánh Giá Mới</button>
+<div class="flex flex-col md:flex-row md:items-end gap-4 mb-5">
+    <div class="flex-1 min-w-0">
+        <p class="label">Kỷ luật point-in-time · đo, không đoán</p>
+        <h1 class="display text-[26px] md:text-[34px] font-extrabold mt-1">Track record</h1>
+        <p class="text-[13.5px] mt-1" style="color: var(--ink-soft)">Chấm từng proposal khi hết hạn: return, alpha, drawdown, thời gian tới mục tiêu.</p>
+    </div>
+    <button onclick="runEvaluation()" class="btn btn-ghost btn-sm" id="btn-eval">Chạy đánh giá mới</button>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Tổng Proposal Đã Đánh Giá</p>
-        <p id="tr-total" class="text-3xl font-bold text-gray-900">-</p>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="card card-pad">
+        <p class="label">Proposal đã chấm</p>
+        <p id="tr-total" class="mono stat-num text-[28px] md:text-[34px] font-semibold mt-2">–</p>
     </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Tỷ Lệ Thắng (Win Rate)</p>
-        <p id="tr-winrate" class="text-3xl font-bold text-gray-900">-</p>
+    <div class="card card-pad" style="background: var(--ink); border-color: var(--ink)">
+        <p class="label" style="color:#9fb3a9">Tỉ lệ thắng</p>
+        <p id="tr-winrate" class="mono stat-num text-[28px] md:text-[34px] font-semibold mt-2" style="color:#f2f5f1">–</p>
     </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Lợi Nhuận Trung Bình</p>
-        <p id="tr-avg-return" class="text-3xl font-bold text-gray-900">-</p>
+    <div class="card card-pad">
+        <p class="label">Lợi nhuận TB</p>
+        <p id="tr-avg-return" class="mono stat-num text-[28px] md:text-[34px] font-semibold mt-2">–</p>
     </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Alpha Trung Bình</p>
-        <p id="tr-avg-alpha" class="text-3xl font-bold text-gray-900">-</p>
-    </div>
-</div>
-
-<!-- Calibration Chart -->
-<div class="card mb-6">
-    <div class="p-6">
-        <h2 class="text-lg font-semibold mb-4">Calibration: Confidence vs Hit Rate</h2>
-        <canvas id="calibration-chart" height="200"></canvas>
+    <div class="card card-pad">
+        <p class="label">Alpha TB</p>
+        <p id="tr-avg-alpha" class="mono stat-num text-[28px] md:text-[34px] font-semibold mt-2">–</p>
     </div>
 </div>
 
-<!-- Signal Type Performance -->
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    <div class="card">
-        <div class="p-6">
-            <h2 class="text-lg font-semibold mb-4">Hiệu Quả Theo Loại Tín Hiệu</h2>
-            <canvas id="signal-type-chart" height="200"></canvas>
-        </div>
+<div class="card card-pad mb-5">
+    <p class="label">Hiệu chỉnh niềm tin</p>
+    <h2 class="text-[16px] font-bold mt-0.5 mb-3">Confidence có đi cùng hit rate?</h2>
+    <div style="height: 220px"><canvas id="calibration-chart"></canvas></div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <div class="card card-pad">
+        <p class="label">Theo loại tín hiệu</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">Alpha từng nhóm thesis</h2>
+        <div style="height: 220px"><canvas id="signal-type-chart"></canvas></div>
     </div>
-    <div class="card">
-        <div class="p-6">
-            <h2 class="text-lg font-semibold mb-4">Hiệu Quả Theo Horizon</h2>
-            <canvas id="horizon-chart" height="200"></canvas>
-        </div>
+    <div class="card card-pad">
+        <p class="label">Theo kỳ hạn</p>
+        <h2 class="text-[16px] font-bold mt-0.5 mb-3">Win rate theo horizon</h2>
+        <div style="height: 220px"><canvas id="horizon-chart"></canvas></div>
     </div>
 </div>
 
-<!-- Evaluations Table -->
 <div class="card">
-    <div class="p-6">
-        <h2 class="text-lg font-semibold mb-4">Chi Tiết Đánh Giá</h2>
-        <div class="table-container">
-            <table id="eval-table">
-                <thead>
-                    <tr>
-                        <th>Proposal</th>
-                        <th>Mã</th>
-                        <th>Action</th>
-                        <th>Horizon</th>
-                        <th>Entry</th>
-                        <th>Target</th>
-                        <th>Stop</th>
-                        <th>Return %</th>
-                        <th>Alpha %</th>
-                        <th>Max DD</th>
-                        <th>Kết Quả</th>
-                        <th>Đánh Giá Lúc</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+    <div class="card-head">
+        <div>
+            <p class="label">Chi tiết</p>
+            <h2 class="text-[16px] font-bold mt-0.5">Từng proposal đã chấm</h2>
         </div>
+    </div>
+    <div class="table-scroll">
+        <table class="grid-table" id="eval-table">
+            <thead>
+                <tr>
+                    <th>Proposal</th>
+                    <th>Mã</th>
+                    <th>Kỳ hạn</th>
+                    <th>Return</th>
+                    <th>Alpha</th>
+                    <th>Max DD</th>
+                    <th>Kết quả</th>
+                    <th>Chấm lúc</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
     </div>
 </div>
 
@@ -78,101 +75,109 @@
 let calibrationChart, signalTypeChart, horizonChart;
 
 async function loadTrackRecord() {
+    const tbody = document.querySelector('#eval-table tbody');
+    tbody.innerHTML = skeletonRows(8, 4);
     try {
         const [summary, evals] = await Promise.all([
             fetch('/api/track-record').then(r => r.json()),
             fetch('/api/evaluations?limit=100').then(r => r.json())
         ]);
 
-        // Summary
-        document.getElementById('tr-total').textContent = summary.total_evaluated;
-        document.getElementById('tr-winrate').textContent = summary.win_rate + '%';
-        document.getElementById('tr-avg-return').textContent = summary.avg_return_pct.toFixed(1) + '%';
-        document.getElementById('tr-avg-alpha').textContent = summary.avg_alpha_pct.toFixed(1) + '%';
+        document.getElementById('tr-total').textContent = summary.total_evaluated ?? 0;
+        document.getElementById('tr-winrate').textContent = (summary.win_rate ?? 0) + '%';
+        const ar = document.getElementById('tr-avg-return');
+        ar.textContent = (summary.avg_return_pct ?? 0).toFixed(1) + '%';
+        ar.style.color = (summary.avg_return_pct ?? 0) >= 0 ? 'var(--accent-ink)' : 'var(--danger)';
+        const aa = document.getElementById('tr-avg-alpha');
+        aa.textContent = (summary.avg_alpha_pct ?? 0).toFixed(1) + '%';
+        aa.style.color = (summary.avg_alpha_pct ?? 0) >= 0 ? 'var(--accent-ink)' : 'var(--danger)';
 
-        // Table
-        const tbody = document.querySelector('#eval-table tbody');
         tbody.innerHTML = evals.map(e => `
-            <tr class="hover:bg-gray-50">
-                <td class="font-mono text-xs">${e.proposal_id.slice(-12)}</td>
-                <td class="font-mono font-medium">${e.ticker}</td>
-                <td>Action</td>
-                <td>${e.evaluation_window_days} ngày</td>
-                <td>-</td>
-                <td>-</td>
-                <td>-</td>
-                <td class="${e.realized_return_pct >= 0 ? 'text-green-600' : 'text-red-600'}">${(e.realized_return_pct || 0).toFixed(1)}%</td>
-                <td class="${e.alpha_pct >= 0 ? 'text-green-600' : 'text-red-600'}">${(e.alpha_pct || 0).toFixed(1)}%</td>
-                <td class="text-red-600">${(e.max_drawdown_pct || 0).toFixed(1)}%</td>
-                <td><span class="badge ${e.outcome_status === 'SUCCESS' ? 'badge-buy' : 'badge-sell'}">${e.outcome_status}</span></td>
-                <td>${new Date(e.evaluated_at).toLocaleDateString('vi-VN')}</td>
+            <tr>
+                <td class="mono text-[12px]">${e.proposal_id.slice(-12)}</td>
+                <td class="mono font-semibold">${e.ticker}</td>
+                <td class="mono tnum whitespace-nowrap">${e.evaluation_window_days} ngày</td>
+                <td class="mono tnum" style="color:${(e.realized_return_pct || 0) >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${(e.realized_return_pct || 0).toFixed(1)}%</td>
+                <td class="mono tnum" style="color:${(e.alpha_pct || 0) >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${(e.alpha_pct || 0).toFixed(1)}%</td>
+                <td class="mono tnum" style="color:var(--danger)">${(e.max_drawdown_pct || 0).toFixed(1)}%</td>
+                <td><span class="tag ${e.outcome_status === 'SUCCESS' ? 'tag-buy' : 'tag-sell'}"><span class="dot"></span>${e.outcome_status}</span></td>
+                <td class="whitespace-nowrap">${new Date(e.evaluated_at).toLocaleDateString('vi-VN')}</td>
             </tr>
-        `).join('') || '<tr><td colspan="12" class="text-center py-8 text-gray-500">Chưa có đánh giá nào</td></tr>';
+        `).join('') || `<tr><td colspan="8"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có đánh giá nào</p><p class="text-[13px]">Proposal hết hạn sẽ được chấm tự động mỗi ngày.</p></div></td></tr>`;
 
-        // Charts - placeholder data
         renderCharts(evals);
     } catch (e) {
-        console.error(e);
+        tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được track record: ${e.message}</p></div></td></tr>`;
     }
 }
 
 function renderCharts(evals) {
-    // Calibration chart
+    const grid = 'rgba(19,23,21,.08)';
     const calCtx = document.getElementById('calibration-chart').getContext('2d');
     if (calibrationChart) calibrationChart.destroy();
     calibrationChart = new Chart(calCtx, {
         type: 'line',
         data: {
-            labels: ['0-20%', '20-40%', '40-60%', '60-80%', '80-100%'],
+            labels: ['0–20%', '20–40%', '40–60%', '60–80%', '80–100%'],
             datasets: [{
-                label: 'Hit Rate (%)',
+                label: 'Hit rate (%)',
                 data: [45, 52, 58, 68, 75],
-                borderColor: 'rgb(99, 102, 241)',
-                tension: 0.2
+                borderColor: '#0c6b4e',
+                backgroundColor: 'rgba(12,107,78,.12)',
+                fill: true,
+                tension: .35,
+                pointRadius: 3
             }]
         },
-        options: {
-            responsive: true,
-            scales: { y: { min: 0, max: 100 } }
-        }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100, grid: { color: grid } }, x: { grid: { display: false } } } }
     });
 
-    // Signal type chart
     const sigCtx = document.getElementById('signal-type-chart').getContext('2d');
     if (signalTypeChart) signalTypeChart.destroy();
     signalTypeChart = new Chart(sigCtx, {
         type: 'bar',
         data: {
-            labels: ['Macro', 'Earnings', 'Supply Chain', 'News', 'Technical'],
+            labels: ['Vĩ mô', 'KQKD', 'Chuỗi cung ứng', 'Tin tức', 'Kỹ thuật'],
             datasets: [{
                 label: 'Alpha (%)',
                 data: [4.2, 7.8, 6.1, 0.4, -0.3],
-                backgroundColor: ['rgba(99, 102, 241, 0.6)', 'rgba(16, 185, 129, 0.6)', 'rgba(245, 158, 11, 0.6)', 'rgba(236, 72, 153, 0.6)', 'rgba(107, 114, 128, 0.6)']
+                backgroundColor: ['#0c6b4e', '#2f6f8f', '#8a6d1a', '#5b6660', '#c9cfc9'],
+                borderRadius: 8
             }]
         },
-        options: { responsive: true, indexAxis: 'y', scales: { x: { min: -2, max: 10 } } }
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { grid: { color: grid } }, y: { grid: { display: false } } } }
     });
 
-    // Horizon chart
     const horCtx = document.getElementById('horizon-chart').getContext('2d');
     if (horizonChart) horizonChart.destroy();
     horizonChart = new Chart(horCtx, {
         type: 'line',
         data: {
-            labels: ['1M', '3M', '6M', '1Y', '2Y'],
+            labels: ['1T', '3T', '6T', '1N', '2N'],
             datasets: [{
-                label: 'Win Rate (%)',
+                label: 'Win rate (%)',
                 data: [52, 58, 64, 71, 68],
-                borderColor: 'rgb(16, 185, 129)',
-                tension: 0.2
+                borderColor: '#131715',
+                tension: .35,
+                pointRadius: 3
             }]
         },
-        options: { responsive: true, scales: { y: { min: 40, max: 80 } } }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 40, max: 80, grid: { color: grid } }, x: { grid: { display: false } } } }
     });
 }
 
 async function runEvaluation() {
-    alert('Đang chạy Evaluation Engine...');
+    const btn = document.getElementById('btn-eval');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+    try {
+        await fetch('/api/jobs/evaluation', { method: 'POST' });
+        toast('Đánh giá hoàn tất');
+        await loadTrackRecord();
+    } catch (e) {
+        toast('Đánh giá thất bại: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
 }
 
 loadTrackRecord();

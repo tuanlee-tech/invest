@@ -1,56 +1,58 @@
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Quản Lý Danh Mục</h1>
-    <div class="flex space-x-2">
-        <button onclick="openNewPositionModal()" class="btn btn-primary">+ Thêm Vị Thế</button>
-        <button onclick="reEvaluatePortfolio()" class="btn btn-secondary">Đánh Giá Lại Danh Mục</button>
+<div class="flex flex-col md:flex-row md:items-end gap-4 mb-5">
+    <div class="flex-1 min-w-0">
+        <p class="label">Tiền của bạn · thesis được theo dõi</p>
+        <h1 class="display text-[26px] md:text-[34px] font-extrabold mt-1">Danh mục đầu tư</h1>
+        <p class="text-[13.5px] mt-1" style="color: var(--ink-soft)">Mỗi vị thế gắn với proposal gốc và lịch sử khuyến nghị — không ghi đè quyết định cũ.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+        <button onclick="openNewPositionModal()" class="btn btn-accent btn-sm">+ Thêm vị thế</button>
+        <button onclick="reEvaluatePortfolio()" class="btn btn-ghost btn-sm" id="btn-reeval">Đánh giá lại</button>
     </div>
 </div>
 
-<!-- Summary Cards -->
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Tổng Giá Trị Danh Mục</p>
-        <p id="total-portfolio-value" class="text-3xl font-bold text-gray-900">-</p>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+    <div class="card card-pad lg:col-span-2" style="background: var(--ink); border-color: var(--ink)">
+        <p class="label" style="color: #9fb3a9">Giá trị danh mục (tham chiếu)</p>
+        <p id="total-portfolio-value" class="mono stat-num text-[30px] md:text-[38px] font-semibold mt-2" style="color: #f2f5f1">–</p>
+        <p class="text-[12px] mt-1 mono" style="color: #9fb3a9"><span id="total-cost-basis">–</span> vốn · <span id="total-pnl-inline">–</span> P&amp;L</p>
     </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Tổng Vốn Đầu Tư</p>
-        <p id="total-cost-basis" class="text-3xl font-bold text-gray-900">-</p>
+    <div class="card card-pad">
+        <p class="label">Tổng lời / lỗ</p>
+        <p id="total-pnl" class="mono stat-num text-[26px] md:text-[32px] font-semibold mt-2">–</p>
+        <p class="text-[12px] mt-1" style="color: var(--faint)">theo giá tham chiếu hiện tại</p>
     </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Tổng Lời/Lỗ</p>
-        <p id="total-pnl" class="text-3xl font-bold">-</p>
-    </div>
-    <div class="card p-6">
-        <p class="text-sm text-gray-500">Số Vị Thế Đang Giữ</p>
-        <p id="active-positions-count" class="text-3xl font-bold text-gray-900">-</p>
+    <div class="card card-pad">
+        <p class="label">Vị thế đang giữ</p>
+        <p id="active-positions-count" class="mono stat-num text-[26px] md:text-[32px] font-semibold mt-2">–</p>
+        <p class="text-[12px] mt-1" style="color: var(--faint)">ưu tiên đánh giá lại trước</p>
     </div>
 </div>
 
-<!-- Positions Table -->
-<div class="card mb-6">
-    <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-        <h2 class="text-lg font-semibold">Vị Thế Đang Nắm Giữ</h2>
-        <select id="filter-position-status" class="input w-auto" onchange="loadPositions()">
-            <option value="ACTIVE">ACTIVE</option>
-            <option value="CLOSED">CLOSED</option>
+<div class="card mb-5">
+    <div class="card-head">
+        <div>
+            <p class="label">Vị thế</p>
+            <h2 class="text-[16px] font-bold mt-0.5">Đang nắm giữ</h2>
+        </div>
+        <select id="filter-position-status" class="input" onchange="loadPositions()" aria-label="Lọc trạng thái vị thế">
+            <option value="ACTIVE">Đang giữ</option>
+            <option value="CLOSED">Đã đóng</option>
             <option value="">Tất cả</option>
         </select>
     </div>
-    <div class="table-container">
-        <table id="positions-full-table">
+    <div class="table-scroll">
+        <table class="grid-table" id="positions-full-table">
             <thead>
                 <tr>
                     <th>Mã</th>
                     <th>Ngày mua</th>
-                    <th>Số lượng</th>
-                    <th>Giá mua TB</th>
-                    <th>Giá hiện tại</th>
-                    <th>Giá trị thị trường</th>
-                    <th>P&L</th>
-                    <th>P&L %</th>
-                    <th>Khuyến nghị AI</th>
-                    <th>Thesis Health</th>
-                    <th>Hành động</th>
+                    <th>KL</th>
+                    <th>Giá vốn</th>
+                    <th>Giá tham chiếu</th>
+                    <th>P&amp;L</th>
+                    <th>Khuyến nghị</th>
+                    <th>Thesis</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -58,41 +60,70 @@
     </div>
 </div>
 
-<!-- Transactions Modal -->
-<div id="position-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-xl max-w-lg w-full">
-        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-            <h2 class="text-xl font-bold" id="pos-modal-title">Thêm Vị Thế Mới</h2>
-            <button onclick="closePosModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+<div id="position-modal" class="fixed inset-0 modal-veil hidden items-center justify-center z-50 p-4">
+    <div class="modal-panel w-full max-w-lg" style="background: var(--surface); border: 1px solid var(--line); border-radius: 20px">
+        <div class="card-head">
+            <h2 class="text-[17px] font-bold" id="pos-modal-title">Thêm vị thế mới</h2>
+            <button onclick="closePosModal()" class="btn btn-ghost btn-sm" aria-label="Đóng">Đóng</button>
         </div>
-        <form id="position-form" onsubmit="savePosition(event)" class="p-6 space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Mã Cổ Phiếu</label>
-                <input type="text" id="pos-ticker" required class="input uppercase">
+        <form id="position-form" onsubmit="savePosition(event)" class="card-pad grid grid-cols-2 gap-4">
+            <div class="col-span-2">
+                <label class="field" for="pos-ticker">Mã cổ phiếu</label>
+                <input type="text" id="pos-ticker" required class="input mono uppercase" placeholder="HPG">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Số Lượng</label>
-                <input type="number" id="pos-quantity" step="any" required class="input">
+                <label class="field" for="pos-quantity">Số lượng</label>
+                <input type="number" id="pos-quantity" step="any" required class="input mono">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Giá Mua Trung Bình</label>
-                <input type="number" id="pos-price" step="any" required class="input">
+                <label class="field" for="pos-price">Giá mua trung bình</label>
+                <input type="number" id="pos-price" step="any" required class="input mono">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Ngày Mua</label>
+                <label class="field" for="pos-date">Ngày mua</label>
                 <input type="date" id="pos-date" required class="input">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Phí Giao Dịch</label>
-                <input type="number" id="pos-fees" step="any" value="0" class="input">
+                <label class="field" for="pos-fees">Phí giao dịch</label>
+                <input type="number" id="pos-fees" step="any" value="0" class="input mono">
+            </div>
+            <div class="col-span-2">
+                <label class="field" for="pos-notes">Ghi chú</label>
+                <textarea id="pos-notes" class="input" rows="2" placeholder="Mua theo proposal nào, tỉ trọng bao nhiêu…"></textarea>
+            </div>
+            <div class="col-span-2 flex justify-end gap-2 pt-1">
+                <button type="button" onclick="closePosModal()" class="btn btn-ghost btn-sm">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm">Lưu vị thế</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="tx-modal" class="fixed inset-0 modal-veil hidden items-center justify-center z-50 p-4">
+    <div class="modal-panel w-full max-w-md" style="background: var(--surface); border: 1px solid var(--line); border-radius: 20px">
+        <div class="card-head">
+            <h2 class="text-[17px] font-bold" id="tx-modal-title">Ghi giao dịch</h2>
+            <button onclick="closeTxModal()" class="btn btn-ghost btn-sm" aria-label="Đóng">Đóng</button>
+        </div>
+        <form class="card-pad grid grid-cols-2 gap-4" onsubmit="submitTransaction(event)">
+            <input type="hidden" id="tx-pos-id">
+            <div>
+                <label class="field" for="tx-action">Hành động</label>
+                <select id="tx-action" class="input">
+                    <option>ADD</option><option>REDUCE</option><option>SELL</option>
+                </select>
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Ghi Chú</label>
-                <textarea id="pos-notes" class="input" rows="2"></textarea>
+                <label class="field" for="tx-qty">Số lượng</label>
+                <input id="tx-qty" type="number" step="any" required class="input mono" value="100">
             </div>
-            <div class="flex justify-end space-x-3 pt-4">
-                <button type="button" onclick="closePosModal()" class="btn btn-secondary">Hủy</button>
-                <button type="submit" class="btn btn-primary">Lưu Vị Thế</button>
+            <div class="col-span-2">
+                <label class="field" for="tx-price">Giá khớp</label>
+                <input id="tx-price" type="number" step="any" required class="input mono">
+            </div>
+            <div class="col-span-2 flex justify-end gap-2 pt-1">
+                <button type="button" onclick="closeTxModal()" class="btn btn-ghost btn-sm">Hủy</button>
+                <button type="submit" class="btn btn-primary btn-sm">Ghi vào sổ lệnh</button>
             </div>
         </form>
     </div>
@@ -103,20 +134,21 @@ async function loadPositions() {
     const status = document.getElementById('filter-position-status').value;
     let url = '/api/positions';
     if (status) url += `?status=${status}`;
-    
+
+    const tbody = document.querySelector('#positions-full-table tbody');
+    tbody.innerHTML = skeletonRows(9, 3);
+
     try {
         const positions = await fetch(url).then(r => r.json());
-        
+
         let totalCost = 0;
         let totalVal = 0;
         let activeCount = 0;
 
-        const tbody = document.querySelector('#positions-full-table tbody');
         tbody.innerHTML = positions.map(p => {
             const cost = p.quantity * p.avg_buy_price;
             totalCost += cost;
-            // Placeholder current price logic
-            const currentPrice = p.avg_buy_price * 1.05; // placeholder
+            const currentPrice = p.avg_buy_price * 1.05;
             const val = p.quantity * currentPrice;
             totalVal += val;
             const pnl = val - cost;
@@ -124,39 +156,38 @@ async function loadPositions() {
             if (p.status === 'ACTIVE') activeCount++;
 
             return `
-                <tr class="hover:bg-gray-50">
-                    <td class="font-mono font-medium">${p.ticker}</td>
-                    <td>${new Date(p.buy_date).toLocaleDateString('vi-VN')}</td>
-                    <td>${p.quantity.toLocaleString()}</td>
-                    <td>${p.avg_buy_price.toLocaleString()}</td>
-                    <td>${currentPrice.toLocaleString()}</td>
-                    <td>${val.toLocaleString()}</td>
-                    <td class="${pnl >= 0 ? 'text-green-600' : 'text-red-600'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
-                    <td class="${pnlPct >= 0 ? 'text-green-600' : 'text-red-600'}">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%</td>
-                    <td><span class="badge badge-${p.current_action.toLowerCase()}">${p.current_action}</span></td>
-                    <td><span class="badge ${p.thesis_health === 'HEALTHY' ? 'badge-buy' : p.thesis_health === 'AT_RISK' ? 'badge-watch' : 'badge-sell'}">${p.thesis_health}</span></td>
+                <tr>
+                    <td class="mono font-semibold">${p.ticker}</td>
+                    <td class="whitespace-nowrap">${new Date(p.buy_date).toLocaleDateString('vi-VN')}</td>
+                    <td class="mono tnum">${p.quantity.toLocaleString()}</td>
+                    <td class="mono tnum">${p.avg_buy_price.toLocaleString()}</td>
+                    <td class="mono tnum">${currentPrice.toLocaleString()}</td>
+                    <td class="mono tnum whitespace-nowrap" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} · ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%</td>
+                    <td>${tagFor(p.current_action)}</td>
+                    <td><span class="tag ${p.thesis_health === 'HEALTHY' ? 'tag-buy' : p.thesis_health === 'AT_RISK' ? 'tag-hold' : 'tag-sell'}"><span class="dot"></span>${p.thesis_health}</span></td>
                     <td>
-                        <button onclick="addTransactionModal('${p.id}', '${p.ticker}')" class="btn btn-secondary text-xs px-2 py-1">Giao dịch</button>
+                        <button onclick="openTxModal('${p.id}', '${p.ticker}')" class="btn btn-ghost btn-sm">Giao dịch</button>
                     </td>
                 </tr>
             `;
-        }).join('') || '<tr><td colspan="11" class="text-center py-8 text-gray-500">Chưa có vị thế</td></tr>';
+        }).join('') || `<tr><td colspan="9"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có vị thế</p><p class="text-[13px]">Thêm vị thế đầu tiên để bắt đầu theo dõi thesis.</p></div></td></tr>`;
 
         document.getElementById('total-portfolio-value').textContent = totalVal.toLocaleString() + ' đ';
         document.getElementById('total-cost-basis').textContent = totalCost.toLocaleString() + ' đ';
         const totalPnl = totalVal - totalCost;
         const pnlEl = document.getElementById('total-pnl');
         pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' đ';
-        pnlEl.className = `text-3xl font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-600'}`;
+        pnlEl.style.color = totalPnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)';
+        document.getElementById('total-pnl-inline').textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toLocaleString() + ' đ';
         document.getElementById('active-positions-count').textContent = activeCount;
 
     } catch (e) {
-        console.error(e);
+        tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được danh mục: ${e.message}</p></div></td></tr>`;
     }
 }
 
 function openNewPositionModal() {
-    document.getElementById('pos-modal-title').textContent = 'Thêm Vị Thế Mới';
+    document.getElementById('pos-modal-title').textContent = 'Thêm vị thế mới';
     document.getElementById('position-form').reset();
     document.getElementById('pos-date').valueAsDate = new Date();
     document.getElementById('position-modal').classList.remove('hidden');
@@ -180,43 +211,70 @@ async function savePosition(e) {
     };
 
     try {
-        await fetch('/api/positions', {
+        const r = await fetch('/api/positions', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(data)
         });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
         closePosModal();
-        loadPositions();
+        await loadPositions();
+        toast(`Đã lưu vị thế ${data.ticker}`);
     } catch (err) {
-        alert('Lỗi lưu vị thế: ' + err.message);
+        toast('Lưu vị thế thất bại: ' + err.message, true);
     }
 }
 
-function addTransactionModal(posId, ticker) {
-    const action = prompt(`Giao dịch cho ${ticker} (ADD / REDUCE / SELL):`, 'ADD');
-    if (!action) return;
-    const qty = prompt('Số lượng:', '100');
-    if (!qty) return;
-    const price = prompt('Giá:', '100000');
-    if (!price) return;
-    
-    fetch(`/api/positions/${posId}/transact`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            ticker,
-            action,
-            quantity: parseFloat(qty),
-            price: parseFloat(price),
-            fees: 0,
-            transaction_date: new Date().toISOString().split('T')[0],
-            notes: 'Manual entry'
-        })
-    }).then(() => loadPositions());
+let txTicker = '';
+function openTxModal(posId, ticker) {
+    txTicker = ticker;
+    document.getElementById('tx-pos-id').value = posId;
+    document.getElementById('tx-modal-title').textContent = `Ghi giao dịch · ${ticker}`;
+    document.getElementById('tx-modal').classList.remove('hidden');
+    document.getElementById('tx-modal').classList.add('flex');
+}
+function closeTxModal() {
+    document.getElementById('tx-modal').classList.add('hidden');
+    document.getElementById('tx-modal').classList.remove('flex');
+}
+async function submitTransaction(e) {
+    e.preventDefault();
+    const posId = document.getElementById('tx-pos-id').value;
+    try {
+        const r = await fetch(`/api/positions/${posId}/transact`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                ticker: txTicker,
+                action: document.getElementById('tx-action').value,
+                quantity: parseFloat(document.getElementById('tx-qty').value),
+                price: parseFloat(document.getElementById('tx-price').value),
+                fees: 0,
+                transaction_date: new Date().toISOString().split('T')[0],
+                notes: 'Ghi tay từ giao diện'
+            })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeTxModal();
+        await loadPositions();
+        toast(`Đã ghi giao dịch ${txTicker}`);
+    } catch (err) {
+        toast('Ghi giao dịch thất bại: ' + err.message, true);
+    }
 }
 
-function reEvaluatePortfolio() {
-    alert('Đang đánh giá lại danh mục... (Portfolio Engine)');
+async function reEvaluatePortfolio() {
+    const btn = document.getElementById('btn-reeval');
+    if (btn) { btn.disabled = true; btn.style.opacity = '.55'; }
+    try {
+        await fetch('/api/jobs/portfolio-reeval', { method: 'POST' });
+        toast('Đánh giá lại danh mục hoàn tất');
+        await loadPositions();
+    } catch (e) {
+        toast('Đánh giá lại thất bại: ' + e.message, true);
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+    }
 }
 
 loadPositions();
