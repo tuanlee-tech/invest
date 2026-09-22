@@ -105,14 +105,31 @@ async function loadTrackRecord() {
             </tr>
         `).join('') || `<tr><td colspan="8"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có đánh giá nào</p><p class="text-[13px]">Proposal hết hạn sẽ được chấm tự động mỗi ngày.</p></div></td></tr>`;
 
-        renderCharts(evals);
+        renderCharts(summary.details || [], evals);
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="glyph">!</div><p class="text-[13px]">Không tải được track record: ${e.message}</p></div></td></tr>`;
     }
 }
 
-function renderCharts(evals) {
+function renderCharts(details, evals) {
     const grid = 'rgba(19,23,21,.08)';
+
+    // Calibration: bucket by confidence, compute win rate per band
+    const bands = {'0-20': [], '20-40': [], '40-60': [], '60-80': [], '80-100': []};
+    details.forEach(d => {
+        const c = d.confidence || 50;
+        if (c < 20) bands['0-20'].push(d);
+        else if (c < 40) bands['20-40'].push(d);
+        else if (c < 60) bands['40-60'].push(d);
+        else if (c < 80) bands['60-80'].push(d);
+        else bands['80-100'].push(d);
+    });
+    const calData = Object.values(bands).map(items => {
+        if (!items.length) return null;
+        const wins = items.filter(d => d.outcome_status === 'SUCCESS').length;
+        return Math.round(wins / items.length * 100);
+    });
+
     const calCtx = document.getElementById('calibration-chart').getContext('2d');
     if (calibrationChart) calibrationChart.destroy();
     calibrationChart = new Chart(calCtx, {
@@ -121,15 +138,33 @@ function renderCharts(evals) {
             labels: ['0–20%', '20–40%', '40–60%', '60–80%', '80–100%'],
             datasets: [{
                 label: 'Hit rate (%)',
-                data: [45, 52, 58, 68, 75],
+                data: calData,
                 borderColor: '#0c6b4e',
                 backgroundColor: 'rgba(12,107,78,.12)',
                 fill: true,
                 tension: .35,
-                pointRadius: 3
+                pointRadius: 3,
+                spanGaps: true
             }]
         },
         options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100, grid: { color: grid } }, x: { grid: { display: false } } } }
+    });
+
+    // Signal type: group by action, compute avg alpha
+    const byAction = {};
+    details.forEach(d => {
+        const a = d.action || 'UNKNOWN';
+        if (!byAction[a]) byAction[a] = [];
+        byAction[a].push(d.alpha_pct || 0);
+    });
+    const sigLabels = Object.keys(byAction);
+    const sigData = sigLabels.map(a => {
+        const vals = byAction[a];
+        return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10;
+    });
+    const sigColors = sigLabels.map(a => {
+        const v = byAction[a].reduce((s, x) => s + x, 0) / byAction[a].length;
+        return v >= 0 ? '#0c6b4e' : '#b3261e';
     });
 
     const sigCtx = document.getElementById('signal-type-chart').getContext('2d');
@@ -137,15 +172,34 @@ function renderCharts(evals) {
     signalTypeChart = new Chart(sigCtx, {
         type: 'bar',
         data: {
-            labels: ['Vĩ mô', 'KQKD', 'Chuỗi cung ứng', 'Tin tức', 'Kỹ thuật'],
+            labels: sigLabels.length ? sigLabels : ['—'],
             datasets: [{
                 label: 'Alpha (%)',
-                data: [4.2, 7.8, 6.1, 0.4, -0.3],
-                backgroundColor: ['#0c6b4e', '#2f6f8f', '#8a6d1a', '#5b6660', '#c9cfc9'],
+                data: sigData.length ? sigData : [0],
+                backgroundColor: sigColors.length ? sigColors : ['#c9cfc9'],
                 borderRadius: 8
             }]
         },
         options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { grid: { color: grid } }, y: { grid: { display: false } } } }
+    });
+
+    // Horizon: group by evaluation_window_days, compute win rate
+    const byHorizon = {};
+    details.forEach(d => {
+        const h = d.evaluation_window_days || 0;
+        let label;
+        if (h <= 30) label = '≤1T';
+        else if (h <= 90) label = '≤3T';
+        else if (h <= 180) label = '≤6T';
+        else if (h <= 365) label = '≤1N';
+        else label = '>1N';
+        if (!byHorizon[label]) byHorizon[label] = [];
+        byHorizon[label].push(d.outcome_status === 'SUCCESS' ? 1 : 0);
+    });
+    const horLabels = Object.keys(byHorizon);
+    const horData = horLabels.map(h => {
+        const vals = byHorizon[h];
+        return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 100);
     });
 
     const horCtx = document.getElementById('horizon-chart').getContext('2d');
@@ -153,16 +207,16 @@ function renderCharts(evals) {
     horizonChart = new Chart(horCtx, {
         type: 'line',
         data: {
-            labels: ['1T', '3T', '6T', '1N', '2N'],
+            labels: horLabels.length ? horLabels : ['—'],
             datasets: [{
                 label: 'Win rate (%)',
-                data: [52, 58, 64, 71, 68],
+                data: horData.length ? horData : [0],
                 borderColor: '#131715',
                 tension: .35,
                 pointRadius: 3
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 40, max: 80, grid: { color: grid } }, x: { grid: { display: false } } } }
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 100, grid: { color: grid } }, x: { grid: { display: false } } } }
     });
 }
 

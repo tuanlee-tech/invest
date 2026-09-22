@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import shutil
 import subprocess
 from typing import Any, Dict, List, Optional
 from app.config import settings
@@ -9,12 +10,23 @@ logger = logging.getLogger(__name__)
 
 
 class OpenCodeClient:
-    """Wrapper to interact with OpenCode CLI for local-first, zero-paid LLM operations."""
+    """Wrapper to interact with OpenCode CLI for local-first, zero-paid LLM operations.
+
+    Supports fallback to local Ollama if available and OpenCode fails.
+    """
 
     def __init__(self, default_model: str = None, models: List[str] = None):
         self.default_model = default_model or settings.OPENCODE_DEFAULT_MODEL
         self.models = models or settings.OPENCODE_FREE_MODELS
         self.bin = settings.OPENCODE_BIN
+
+        # Check for Ollama availability
+        self.ollama_available = shutil.which("ollama") is not None
+        self.ollama_models = ["llama3", "llama3.1", "gemma2", "qwen2.5"]
+        if self.ollama_available:
+            logger.info("Ollama detected as fallback LLM provider")
+        else:
+            logger.info("Ollama not available, using OpenCode free models only")
 
     def run_prompt(
         self, prompt: str, model: Optional[str] = None, timeout: int = 120
@@ -79,7 +91,41 @@ class OpenCodeClient:
                     f"Model {m} failed: {e}. Trying fallback if available."
                 )
 
+        # Try Ollama fallback if available
+        if self.ollama_available:
+            logger.info("Trying Ollama fallback...")
+            for m in self.ollama_models:
+                try:
+                    return self._run_ollama(prompt, m, timeout)
+                except Exception as e:
+                    logger.warning(f"Ollama model {m} failed: {e}")
+
         raise RuntimeError(f"All models failed. Last error: {last_error}")
+
+    def _run_ollama(self, prompt: str, model: str, timeout: int = 120) -> str:
+        """Run prompt via Ollama CLI."""
+        cmd = [
+            "ollama",
+            "run",
+            model,
+            prompt,
+        ]
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            encoding="utf-8",
+        )
+
+        if res.returncode != 0:
+            raise RuntimeError(f"Ollama exit code {res.returncode}: {res.stderr.strip()}")
+
+        output = res.stdout.strip()
+        if not output:
+            raise RuntimeError("Empty output from Ollama")
+
+        return output
 
     def run_structured_json(
         self, prompt: str, model: Optional[str] = None, timeout: int = 120
@@ -163,12 +209,14 @@ Trả về JSON theo format:
         events_str = json.dumps(
             [e.get("headline") for e in recent_events[:5]], ensure_ascii=False
         )
+        fundamentals_str = json.dumps(fundamentals, ensure_ascii=False, default=str)
 
         prompt = f"""Bạn là hệ thống hỗ trợ quyết định đầu tư dài hạn (trên 1 năm) cho cổ phiếu Việt Nam.
 Mã phân tích: {ticker}
 Giá hiện tại tham chiếu: {current_price:,.0f} VND
 Thông tin nắm giữ của các quỹ lớn: {funds_str}
 Sự kiện / tin tức gần đây: {events_str}
+Thông số tài chính (FUNDAMENTALS): {fundamentals_str}
 
 Hãy tạo một Investment Proposal toàn diện:
 1. Đề xuất action: BUY, WATCH, hoặc AVOID. (Ưu tiên BUY nếu có nhiều quỹ lớn cùng nắm giữ và luận điểm kinh doanh vững).

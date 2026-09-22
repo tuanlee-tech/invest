@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, date, timedelta
+from datetime import datetime, timezone, date, timedelta
+from pathlib import Path
 
 from app.core.models.schema import get_db, Fund, FundHoldingSnapshot, Security, Event, Proposal, Position, Transaction, Watchlist, ProposalEvaluation
 from app.schemas.domain import ProposalCreate, ProposalRevision, PositionCreate, TransactionCreate, EventCreate
@@ -138,7 +140,7 @@ def create_proposal(data: ProposalCreate, db: Session = Depends(get_db)):
     import uuid
     group_id = f"{data.ticker}-{datetime.now().strftime('%Y')}-{str(uuid.uuid4())[:8]}"
     proposal_id = f"{group_id}-v1"
-    
+
     proposal = Proposal(
         id=proposal_id,
         proposal_group_id=group_id,
@@ -153,8 +155,8 @@ def create_proposal(data: ProposalCreate, db: Session = Depends(get_db)):
         stop_reference=data.stop_reference,
         stop_method=data.stop_method,
         horizon_days=data.horizon_days,
-        valid_from=datetime.utcnow(),
-        valid_until=datetime.utcnow() + timedelta(days=data.horizon_days),
+        valid_from=datetime.now(timezone.utc),
+        valid_until=datetime.now(timezone.utc) + timedelta(days=data.horizon_days),
         confidence=data.confidence,
         position_size_suggestion=data.position_size_suggestion,
         thesis=data.thesis,
@@ -175,14 +177,14 @@ def revise_proposal(proposal_id: str, data: ProposalRevision, db: Session = Depe
     original = db.query(Proposal).filter(Proposal.id == proposal_id).first()
     if not original:
         raise HTTPException(404, "Proposal not found")
-    
+
     # Create new version
     new_version = original.version + 1
     new_id = f"{original.proposal_group_id}-v{new_version}"
-    
+
     # Mark original as REVISED
     original.status = "REVISED"
-    
+
     revision = Proposal(
         id=new_id,
         proposal_group_id=original.proposal_group_id,
@@ -198,8 +200,8 @@ def revise_proposal(proposal_id: str, data: ProposalRevision, db: Session = Depe
         stop_reference=data.stop_reference,
         stop_method=data.stop_method or original.stop_method,
         horizon_days=data.horizon_days or original.horizon_days,
-        valid_from=datetime.utcnow(),
-        valid_until=datetime.utcnow() + timedelta(days=data.horizon_days or original.horizon_days),
+        valid_from=datetime.now(timezone.utc),
+        valid_until=datetime.now(timezone.utc) + timedelta(days=data.horizon_days or original.horizon_days),
         confidence=data.confidence,
         position_size_suggestion=data.position_size_suggestion or original.position_size_suggestion,
         thesis=data.thesis,
@@ -241,7 +243,7 @@ def get_position(position_id: str, db: Session = Depends(get_db)):
 def create_position(data: PositionCreate, db: Session = Depends(get_db)):
     import uuid
     pos_id = str(uuid.uuid4())[:8]
-    
+
     pos = Position(
         id=pos_id,
         ticker=data.ticker,
@@ -262,10 +264,10 @@ def add_transaction(position_id: str, data: TransactionCreate, db: Session = Dep
     pos = db.query(Position).filter(Position.id == position_id).first()
     if not pos:
         raise HTTPException(404, "Position not found")
-    
+
     import uuid
     tx_id = str(uuid.uuid4())[:8]
-    
+
     tx = Transaction(
         id=tx_id,
         position_id=position_id,
@@ -277,7 +279,7 @@ def add_transaction(position_id: str, data: TransactionCreate, db: Session = Dep
         transaction_date=data.transaction_date,
         notes=data.notes,
     )
-    
+
     # Update position quantity and avg price
     if data.action in ["BUY", "ADD"]:
         total_cost = pos.quantity * pos.avg_buy_price + data.quantity * data.price + data.fees
@@ -287,10 +289,10 @@ def add_transaction(position_id: str, data: TransactionCreate, db: Session = Dep
         pos.quantity -= data.quantity
         if pos.quantity <= 0:
             pos.status = "CLOSED"
-            pos.closed_at = datetime.utcnow()
+            pos.closed_at = datetime.now(timezone.utc)
             pos.closed_price = data.price
             pos.realized_pnl = (data.price - pos.avg_buy_price) * data.quantity - data.fees
-    
+
     db.add(tx)
     db.commit()
     return tx
@@ -321,7 +323,7 @@ def add_to_watchlist(ticker: str, notes: Optional[str] = None, priority: str = "
         existing.priority = priority
         db.commit()
         return existing
-    
+
     item = Watchlist(ticker=ticker, notes=notes, priority=priority)
     db.add(item)
     db.commit()
@@ -336,6 +338,32 @@ def remove_from_watchlist(ticker: str, db: Session = Depends(get_db)):
     db.delete(item)
     db.commit()
     return {"ok": True}
+
+
+# ============================================================
+# PRICES (Real-time from vnstock)
+# ============================================================
+
+@api.get("/prices/{ticker}")
+def get_price(ticker: str):
+    """Get latest price for a ticker from vnstock"""
+    from app.core.engines.market_data import get_latest_price
+    price = get_latest_price(ticker)
+    if price is None:
+        raise HTTPException(404, f"Price not found for {ticker}")
+    return {"ticker": ticker, "price": price, "source": "vnstock"}
+
+
+@api.get("/prices")
+def get_prices(tickers: str = ""):
+    """Get latest prices for multiple tickers (comma-separated)"""
+    from app.core.engines.market_data import get_latest_price
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    result = {}
+    for t in ticker_list:
+        price = get_latest_price(t)
+        result[t] = {"price": price, "source": "vnstock"} if price else {"price": None, "error": "not found"}
+    return result
 
 
 # ============================================================
@@ -359,24 +387,45 @@ def get_track_record(db: Session = Depends(get_db)):
     evals = db.query(ProposalEvaluation).filter(
         ProposalEvaluation.outcome_status.in_(["SUCCESS", "FAILED"])
     ).all()
-    
+
     total = len(evals)
     if total == 0:
         return {"total": 0, "win_rate": 0, "avg_return": 0, "avg_alpha": 0}
-    
+
     wins = sum(1 for e in evals if e.outcome_status == "SUCCESS")
     avg_return = sum(e.realized_return_pct or 0 for e in evals) / total
     avg_alpha = sum(e.alpha_pct or 0 for e in evals) / total
-    
-    # By confidence band
-    high_conf = [e for e in evals if e.realized_return_pct is not None and e.benchmark_return_pct is not None]
-    
+
+    # Per-evaluation details
+    details = []
+    for e in evals:
+        proposal = db.query(Proposal).filter(Proposal.id == e.proposal_id).first()
+        details.append({
+            "proposal_id": e.proposal_id,
+            "ticker": e.ticker,
+            "confidence": proposal.confidence if proposal else None,
+            "action": proposal.action if proposal else None,
+            "realized_return_pct": round(e.realized_return_pct, 2) if e.realized_return_pct else 0,
+            "benchmark_return_pct": round(e.benchmark_return_pct, 2) if e.benchmark_return_pct else 0,
+            "alpha_pct": round(e.alpha_pct, 2) if e.alpha_pct else 0,
+            "max_drawdown_pct": round(e.max_drawdown_pct, 2) if e.max_drawdown_pct else 0,
+            "outcome_status": e.outcome_status,
+            "evaluated_at": e.evaluated_at.isoformat() if e.evaluated_at else None,
+        })
+
     return {
         "total_evaluated": total,
         "win_rate": round(wins / total * 100, 1),
         "avg_return_pct": round(avg_return, 2),
         "avg_alpha_pct": round(avg_alpha, 2),
-        "by_confidence": {},
-        "by_horizon": {},
-        "by_signal_type": {},
+        "details": details,
     }
+
+
+@api.get("/disclaimer")
+def get_disclaimer():
+    """Return full disclaimer text"""
+    disclaimer_path = Path(__file__).resolve().parent.parent.parent / "DISCLAIMER.md"
+    if disclaimer_path.exists():
+        return PlainTextResponse(disclaimer_path.read_text(encoding="utf-8"))
+    return PlainTextResponse("Disclaimer not found.")

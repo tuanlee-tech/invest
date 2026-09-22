@@ -1,6 +1,6 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from app.config import settings
@@ -57,23 +57,23 @@ class EngineScheduler:
         )
 
         self.scheduler.start()
-        print(f"[{datetime.utcnow()}] Background scheduler started with 4 jobs.")
+        print(f"[{datetime.now(timezone.utc)}] Background scheduler started with 4 jobs.")
 
     def shutdown(self):
         """Stop all background jobs"""
         self.scheduler.shutdown()
-        print(f"[{datetime.utcnow()}] Background scheduler shut down.")
+        print(f"[{datetime.now(timezone.utc)}] Background scheduler shut down.")
 
     def _safe_job(self, func, name: str):
         """Wrapper to prevent unhandled exceptions from stopping scheduler"""
         def wrapper():
-            print(f"[{datetime.utcnow()}] Starting scheduled job: {name}")
+            print(f"[{datetime.now(timezone.utc)}] Starting scheduled job: {name}")
             try:
                 result = func()
-                print(f"[{datetime.utcnow()}] Completed scheduled job: {name}, Result: {result}")
+                print(f"[{datetime.now(timezone.utc)}] Completed scheduled job: {name}, Result: {result}")
             except Exception as e:
                 logger.error(f"Error in job {name}: {e}", exc_info=True)
-                print(f"[{datetime.utcnow()}] ERROR in job {name}: {e}")
+                print(f"[{datetime.now(timezone.utc)}] ERROR in job {name}: {e}")
         return wrapper
 
 

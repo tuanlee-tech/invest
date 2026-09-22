@@ -42,4 +42,3 @@ htmlcov/
 # Temporary
 *.tmp
 *.temp
-test_*.py

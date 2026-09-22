@@ -9,18 +9,22 @@ from app.config import settings
 from app.core.models.schema import init_db
 from app.api.routes import api
 from app.scheduler import scheduler
+from app.core.logging_config import setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: initialize database and scheduler
+    setup_logging("INFO", "data/app.log")
     init_db()
-    print("[startup] Database initialized.")
+    logger.info("Database initialized.")
     scheduler.start()
     yield
     # Shutdown
     scheduler.shutdown()
-    print("[shutdown] Cleanup complete.")
+    logger.info("Cleanup complete.")
 
 
 app = FastAPI(
@@ -42,7 +46,7 @@ jinja_env = Environment(
 class SyncTemplates:
     def __init__(self, env):
         self.env = env
-    
+
     def TemplateResponse(self, name: str, context: dict, status_code: int = 200, headers: dict = None):
         template = self.env.get_template(name)
         content = template.render(context)
@@ -79,7 +83,7 @@ async def test_llm():
     try:
         import subprocess, json
         result = subprocess.run(
-            ["opencode", "run", "--pure", "-m", "opencode/big-pickle", 
+            ["opencode", "run", "--pure", "-m", "opencode/big-pickle",
              "--title", "test", "--format", "json",
              "Chỉ trả lời JSON: {\"ok\": true, \"message\": \"Test thành công\"}"],
             capture_output=True, text=True, timeout=60

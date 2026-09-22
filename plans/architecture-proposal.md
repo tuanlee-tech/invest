@@ -1,5 +1,8 @@
 # Architecture Proposal — VN Investment Intelligence (Fund-First Scope)
 
+**Status**: MVP implemented. Core engines, web UI, real vnstock pricing, Docker — all working.
+**Last updated**: 2026-09-22
+
 ## 1. System Overview
 
 **Goal**: Local-first web app that tracks fund holdings (VEIL, VESAF, VCBF-BCF, PYN Elite), ingests market/news events, produces versioned investment proposals with evidence, manages portfolio positions, and evaluates outcomes.
@@ -110,17 +113,17 @@ Proposal:
   valid_until: datetime
   confidence: float         # 0-100
   position_size_pct: float  # suggested % of portfolio
-  
+
   thesis: str
   catalysts: List[str]
   risks: List[str]
   invalidation_conditions: List[InvalidationCondition]
-  
+
   evidence_refs: List[str]  # event_ids
   data_snapshot_id: str     # point-in-time data bundle hash
   model_run_id: str         # model, prompt hash, output hash
   reasoning_summary: str
-  
+
   created_at: datetime
   created_by: str           # engine, model, or user
   changed_from_previous: str # what changed and why
@@ -196,16 +199,16 @@ InvalidationCondition:
 
 ## 5. Technology Stack
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| API/Web | FastAPI + HTMX + Tailwind | Local-first, minimal JS, server-rendered fragments, easy offline |
-| Database | SQLite (local file) + SQLAlchemy | Zero-config, portable, ACID, enough for single-user local |
-| ORM | SQLAlchemy 2.0 + Alembic | Type-safe, migrations, async support |
-| Scheduler | APScheduler | Cron + interval jobs, in-process |
-| Ingestion | Custom pipeline + vnstock | Vietnam data, replaceable adapters |
-| LLM | OpenCode CLI (subprocess) | Harness-agnostic, free models, local-first |
-| Validation | Pydantic v2 | Schema enforcement, serialization |
-| Charts | Chart.js (CDN) | Lightweight, works offline if cached |
+| Layer | Choice | Rationale | Status |
+|-------|--------|-----------|--------|
+| API/Web | FastAPI + HTMX + Tailwind | Local-first, minimal JS, server-rendered fragments, easy offline | ✅ |
+| Database | SQLite (local file) + SQLAlchemy | Zero-config, portable, ACID, enough for single-user local | ✅ |
+| ORM | SQLAlchemy 2.0 + Alembic | Type-safe, migrations, async support | ✅ |
+| Scheduler | APScheduler | Cron + interval jobs, in-process | ✅ |
+| Ingestion | Custom pipeline + vnstock | Vietnam data, replaceable adapters | ✅ |
+| LLM | OpenCode CLI (subprocess) | Harness-agnostic, free models, local-first | ✅ |
+| Validation | Pydantic v2 | Schema enforcement, serialization | ✅ |
+| Charts | Chart.js (CDN) | Lightweight, works offline if cached | ✅ |
 
 **Not used in V1**: Redis, Celery, Kafka, Kubernetes, vector DB, graph DB, cloud services.
 
@@ -213,14 +216,14 @@ InvalidationCondition:
 
 | Capability | Primary Adapter | Fallback | Status |
 |------------|----------------|----------|--------|
-| Fund holdings PDF | Custom PDF parser (pypdf) | Manual CSV import | ADAPT |
-| Market data (OHLCV) | vnstock (KBS source) | CSV import | ADAPT |
-| Fundamentals | vnstock (KBS) | Manual import | ADAPT |
-| News RSS (Vietnam) | feedparser | — | BUILD |
-| News RSS (Global) | feedparser | — | BUILD |
-| Corporate disclosures | SSC/HOSE/HNX RSS | Manual | BUILD |
-| Macro (VN) | GSO/SBV RSS/API | Manual | BUILD |
-| LLM | OpenCode (big-pickle, mimo-v2.5-free) | Ollama local | ADAPT |
+| Fund holdings PDF | Custom PDF parser (pypdf) | Manual CSV import | ✅ DONE |
+| Market data (OHLCV) | vnstock 4.0.8 Quote API | CSV import | ✅ DONE |
+| Fundamentals | vnstock 4.0.8 Fundamental API | Manual import | ✅ DONE |
+| News RSS (Vietnam) | feedparser | — | ✅ DONE |
+| News RSS (Global) | feedparser | — | ✅ DONE |
+| Corporate disclosures | SSC/HOSE/HNX RSS | Manual | TODO |
+| Macro (VN) | GSO/SBV RSS/API | Manual | TODO |
+| LLM | OpenCode (big-pickle, mimo-v2.5-free) | Ollama local | ✅ DONE |
 
 ## 7. Reuse/Adapt/Build Matrix
 
@@ -229,11 +232,11 @@ InvalidationCondition:
 | Multi-agent debate | TradingAgents | ADAPT | Use analyst roles, debate structure; replace data layer with vnstock |
 | Backtesting | TradingAgents | ADAPT | Use point-in-time logic; wrap in our evaluation engine |
 | Portfolio context | TradingAgents | ADAPT | Use portfolio-aware run concept |
-| PDF parsing | pypdf | REUSE | Already verified in feasibility |
-| Market data | vnstock 4.0.8 | ADAPT | Wrap behind provider interface |
-| UI framework | FastAPI+HTMX | BUILD | Simpler than Next.js for local-first |
-| Event extraction | LLM + patterns | BUILD | Start with LLM, add patterns for known formats |
-| Causal graph | Custom | BUILD | Simple adjacency list in SQLite first |
+| PDF parsing | pypdf | ✅ REUSE | Verified in feasibility, working in production |
+| Market data | vnstock 4.0.8 | ✅ ADAPT | `vnstock.api.quote.Quote` — working with real pricing |
+| UI framework | FastAPI+HTMX | ✅ BUILD | 6 views running, Tailwind+Chart.js CDN |
+| Event extraction | LLM + patterns | ✅ BUILD | LLM-based causal analysis working |
+| Causal graph | Custom | PARTIAL | Manual causal_links in SQLite; sector graph TODO |
 
 ## 8. Free Baseline Configuration
 
@@ -251,28 +254,28 @@ Scheduler: In-process APScheduler
 
 ## 9. Cross-Platform Deployment
 
-```
-git clone <repo>
+```bash
+# Ubuntu/macOS
+git clone git@github.com:tuanlee-tech/invest.git
 cd invest
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # macOS/Linux
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env if needed (optional for free baseline)
-python -m app.main
-# Open http://localhost:8000
-```
+python -m app.storage.seed   # seed DB
+python -m app.main            # http://localhost:8000
 
-Docker Compose also provided for consistency.
+# Docker (one-shot)
+docker compose up --build     # http://localhost:8000
+```
 
 ## 10. Open Questions for Implementation
 
-1. **Fund holding parser**: Build generic table extractor or per-fund template?
-2. **Event deduplication**: Hash-based + semantic similarity threshold?
+1. ~~**Fund holding parser**: Build generic table extractor or per-fund template?~~ → Per-fund templates (VESAF, VCBF-BCF, VEIL)
+2. ~~**Event deduplication**: Hash-based + semantic similarity threshold?~~ → Hash-based (SHA256 of URL)
 3. **Causal graph storage**: SQLite adjacency vs dedicated graph when needed?
-4. **LLM output validation**: Pydantic schema + retry loop vs structured output?
-5. **Checkpointing**: SQLite WAL mode for concurrent read/write?
+4. ~~**LLM output validation**: Pydantic schema + retry loop vs structured output?~~ → Regex extraction from structured JSON
+5. ~~**Checkpointing**: SQLite WAL mode for concurrent read/write?~~ → Single-user, not needed yet
 6. **Portfolio import**: CSV schema for user positions?
 
 ---

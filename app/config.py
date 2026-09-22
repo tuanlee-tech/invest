@@ -7,24 +7,24 @@ from typing import Optional
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///data/invest.db"
-    
+
     # OpenCode
     OPENCODE_BIN: str = "opencode"
     OPENCODE_DEFAULT_MODEL: str = "opencode/big-pickle"
     OPENCODE_FREE_MODELS: list[str] = ["opencode/big-pickle", "opencode/mimo-v2.5-free", "opencode/nemotron-3-ultra-free"]
-    
+
     # vnstock
     VNSTOCK_RATE_LIMIT: int = 60  # requests per minute
-    
+
     # Paths
     DATA_DIR: Path = Path("data")
     FUND_PDF_DIR: Path = Path("data/fund_pdfs")
     EXPORT_DIR: Path = Path("data/exports")
-    
+
     # Scheduler
     INGESTION_INTERVAL_MINUTES: int = 60
     REEVALUATION_INTERVAL_MINUTES: int = 120
-    
+
     # Fund sources
     FUND_SOURCES: dict = {
         "VEIL": {
@@ -53,10 +53,24 @@ class Settings(BaseSettings):
             "manager": "PYN Fund Management",
             "factsheet_url": "https://www.pyn.fi/en/pyn-elite-fund/portfolio/",
             "base_url": "https://www.pyn.fi/en/pyn-elite-fund/",
-            "type": "specialized",
+            "type": "html_js_rendered",  # JS-rendered page; holdings seeded manually in seed.py
+        },
+        "SSI-SCA": {
+            "name": "SSI Sustainable Competitive Advantage Fund",
+            "manager": "SSIAM",
+            "factsheet_url": "https://www.ssiam.com.vn/fund/ssi-sca",
+            "base_url": "https://www.ssiam.com.vn/fund/ssi-sca",
+            "type": "open_end",
+        },
+        "DCDS": {
+            "name": "Dragon Capital Dividend Select Fund",
+            "manager": "Dragon Capital",
+            "factsheet_url": "https://www.dragoncapital.com/individual/funds/dcds/",
+            "base_url": "https://www.dragoncapital.com/individual/funds/dcds/",
+            "type": "open_end",
         },
     }
-    
+
     # News sources (RSS)
     NEWS_SOURCES: dict = {
         "cafef": "https://cafef.vn/rss/thi-truong-chung-khoan.rss",
@@ -65,7 +79,7 @@ class Settings(BaseSettings):
         "dautu": "https://dautu.vn/rss/kinh-te.rss",
         "bizlive": "https://bizlive.vn/rss/co-phieu.rss",
     }
-    
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -388,7 +388,7 @@
         <div id="view-settings" class="hidden"></div>
 
         <footer class="mt-10 pb-6 flex flex-col md:flex-row gap-2 md:items-center md:justify-between text-[12px]" style="color: var(--faint)">
-            <p>Hệ thống hỗ trợ nghiên cứu, không phải khuyến nghị mua bán. Mọi con số tính toán đều truy được nguồn.</p>
+            <p>Hệ thống hỗ trợ nghiên cứu, không phải khuyến nghị mua bán. Mọi con số tính toán đều truy được nguồn. <a href="/api/disclaimer" class="underline hover:text-[var(--ink-soft)]">Disclaimer đầy đủ</a></p>
             <p class="mono">local-first · free baseline · point-in-time</p>
         </footer>
     </main>
@@ -500,13 +500,15 @@
                 `).join('') || `<tr><td colspan="7"><div class="empty"><div class="glyph">◌</div><p class="font-semibold" style="color:var(--ink-soft)">Chưa có proposal đang mở</p><p class="text-[13px]">Chạy “Quét cơ hội” để tạo đề xuất đầu tiên.</p></div></td></tr>`;
 
                 pbody.innerHTML = positions.map(p => {
-                    const pnl = 0;
+                    // For active positions, show live P&L if we can get current price
+                    // For now, use realized_pnl for closed positions
+                    const pnl = p.realized_pnl || 0;
                     return `
                         <tr>
                             <td class="mono font-semibold">${p.ticker}</td>
                             <td class="mono tnum">${p.quantity.toLocaleString()}</td>
                             <td class="mono tnum">${p.avg_buy_price.toLocaleString()}</td>
-                            <td class="mono tnum ${pnl >= 0 ? '' : ''}" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
+                            <td class="mono tnum" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()}</td>
                             <td>${tagFor(p.current_action)}</td>
                             <td><span class="tag ${p.thesis_health === 'HEALTHY' ? 'tag-buy' : p.thesis_health === 'AT_RISK' ? 'tag-hold' : 'tag-sell'}"><span class="dot"></span>${p.thesis_health}</span></td>
                         </tr>

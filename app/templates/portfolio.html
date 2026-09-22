@@ -141,6 +141,25 @@ async function loadPositions() {
     try {
         const positions = await fetch(url).then(r => r.json());
 
+        // Collect active tickers for live price fetch
+        const activeTickers = positions
+            .filter(p => p.status === 'ACTIVE')
+            .map(p => p.ticker);
+
+        // Fetch live prices for active tickers
+        let priceMap = {};
+        if (activeTickers.length > 0) {
+            try {
+                const priceResp = await fetch('/api/prices?tickers=' + activeTickers.join(','));
+                const priceData = await priceResp.json();
+                for (const [ticker, data] of Object.entries(priceData)) {
+                    if (data.price) priceMap[ticker] = data.price;
+                }
+            } catch (e) {
+                console.warn('Live price fetch failed:', e);
+            }
+        }
+
         let totalCost = 0;
         let totalVal = 0;
         let activeCount = 0;
@@ -148,11 +167,12 @@ async function loadPositions() {
         tbody.innerHTML = positions.map(p => {
             const cost = p.quantity * p.avg_buy_price;
             totalCost += cost;
-            const currentPrice = p.avg_buy_price * 1.05;
-            const val = p.quantity * currentPrice;
+            // Use live price for active positions, closed_price for closed
+            const currentPrice = p.status === 'ACTIVE' ? priceMap[p.ticker] : (p.closed_price || null);
+            const val = currentPrice ? p.quantity * currentPrice : cost;
             totalVal += val;
-            const pnl = val - cost;
-            const pnlPct = ((currentPrice - p.avg_buy_price) / p.avg_buy_price) * 100;
+            const pnl = currentPrice ? (currentPrice - p.avg_buy_price) * p.quantity : 0;
+            const pnlPct = currentPrice ? ((currentPrice - p.avg_buy_price) / p.avg_buy_price) * 100 : 0;
             if (p.status === 'ACTIVE') activeCount++;
 
             return `
@@ -161,8 +181,8 @@ async function loadPositions() {
                     <td class="whitespace-nowrap">${new Date(p.buy_date).toLocaleDateString('vi-VN')}</td>
                     <td class="mono tnum">${p.quantity.toLocaleString()}</td>
                     <td class="mono tnum">${p.avg_buy_price.toLocaleString()}</td>
-                    <td class="mono tnum">${currentPrice.toLocaleString()}</td>
-                    <td class="mono tnum whitespace-nowrap" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} · ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%</td>
+                    <td class="mono tnum">${currentPrice ? currentPrice.toLocaleString() : '—'}</td>
+                    <td class="mono tnum whitespace-nowrap" style="color:${pnl >= 0 ? 'var(--accent-ink)' : 'var(--danger)'}">${currentPrice ? `${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} · ${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%` : '—'}</td>
                     <td>${tagFor(p.current_action)}</td>
                     <td><span class="tag ${p.thesis_health === 'HEALTHY' ? 'tag-buy' : p.thesis_health === 'AT_RISK' ? 'tag-hold' : 'tag-sell'}"><span class="dot"></span>${p.thesis_health}</span></td>
                     <td>

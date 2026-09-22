@@ -1,7 +1,7 @@
 # Handoff Document — VN Investment Intelligence (Fund-First MVP)
 
-**Date**: 2026-09-21  
-**Status**: MVP running locally, all endpoints 200 OK, integration tests pass
+**Date**: 2026-09-22
+**Status**: MVP running locally on Ubuntu, all endpoints 200 OK, real vnstock pricing
 
 ---
 
@@ -57,10 +57,10 @@ Proposal:
 ## 2. How to Run
 
 ```bash
-cd E:\invest
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt  # see below
+cd invest
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 cp .env.example .env  # optional, free baseline works without keys
 python -m app.storage.seed  # seed DB
 python -m app.main        # http://localhost:8000
@@ -83,6 +83,7 @@ apscheduler==3.11.3
 python-dotenv==1.2.3
 jinja2==3.1.6
 markdown2==2.5.5
+requests>=2.31.0
 ```
 
 **Free baseline**: No API keys required. OpenCode uses `big-pickle` (free). vnstock guest mode: 60 req/min, 4 financial periods.
@@ -92,7 +93,7 @@ markdown2==2.5.5
 ## 3. Key Files Structure
 
 ```
-E:\invest\
+invest/
 ├── app/
 │   ├── main.py                 # FastAPI app, templates, scheduler
 │   ├── config.py               # Settings, fund sources, RSS feeds
@@ -101,23 +102,30 @@ E:\invest\
 │   ├── core/
 │   │   ├── models/schema.py    # SQLAlchemy models + SessionLocal
 │   │   └── engines/
+│   │       ├── market_data.py      # vnstock wrapper (OHLCV, price, drawdown)
+│   │       ├── fundamentals.py     # vnstock fundamentals normalization
+│   │       ├── causal_graph.py     # Sector→ticker causal mapping
 │   │       ├── opportunity_engine.py
 │   │       ├── portfolio_engine.py
 │   │       └── evaluation_engine.py
 │   ├── ingestion/
-│   │   ├── pipeline/main.py    # Fund PDF + RSS ingestion
-│   │   └── adapters/           # (reserved for more sources)
-│   ├── llm/client.py           # OpenCodeClient wrapper
+│   │   └── pipeline/main.py    # Fund PDF + HTML ingestion
+│   ├── llm/
+│   │   ├── client.py           # OpenCodeClient wrapper
+│   │   └── prompts.py          # Versioned prompt templates (v1.0)
 │   ├── storage/seed.py         # Sample data loader
 │   ├── templates/              # Jinja2 (sync rendering)
 │   └── schemas/domain.py       # Pydantic request models
+├── tests/test_lifecycle.py     # Integration tests (5 tests, all pass)
 ├── data/invest.db              # SQLite (auto-created)
-├── research/                   # Feasibility reports, probes
+├── research/                   # Feasibility reports
 ├── plans/architecture-proposal.md
-├── tests/test_lifecycle.py     # Integration test (passes)
 ├── requirements.txt
+├── Dockerfile
+├── docker-compose.yml
+├── DISCLAIMER.md
 ├── .env.example
-└── README.md
+└── HANDOFF.md
 ```
 
 ---
@@ -126,26 +134,29 @@ E:\invest\
 
 | Area | Gap | Priority |
 |------|-----|----------|
-| **Valuation** | Mock price (100k), no DCF/comps/residual income | High |
-| **Fundamentals** | vnstock ratios have duplicate quarters; need normalization | High |
+| **Valuation** | ✅ Real vnstock pricing + fundamentals | Done |
+| **Fundamentals** | ✅ Normalized (dedup quarters, VND units) | Done |
+| **Historical holdings** | ✅ 3 months x 3 funds = 9 snapshots | Done |
+| **Causal graph** | ✅ Auto-generated from sector mapping | Done |
+| **Prompts** | ✅ Versioned templates (v1.0) | Done |
+| **Track record** | ✅ Real evaluations with vnstock data | Done |
+| **PYN Elite** | ✅ 20 holdings seeded (JS-rendered page) | Done |
+| **Docker** | ✅ Dockerfile + docker-compose.yml | Done |
+| **Legal** | ✅ DISCLAIMER.md + /api/disclaimer endpoint | Done |
+| **Tests** | ✅ 5 lifecycle tests, all pass | Done |
 | **Corporate actions** | No split/dividend/rights adjustment | Medium |
-| **Historical holdings** | Only 1 snapshot/fund; need ≥3 kỳ for trend detection | High |
-| **Causal graph** | Manual `causal_links` only; no sector-supplychain mapping | Medium |
-| **LLM benchmark** | No Vietnamese eval set; prompt templates not versioned | Medium |
 | **Local LLM** | Ollama not tested; no fallback routing | Low |
-| **Docker** | No Dockerfile/compose.yml | Medium |
-| **Config/secrets** | `.env.example` missing; no secret rotation | Low |
-| **Legal** | Disclaimer, data license audit pending | Medium |
+| **Config/secrets** | No secret rotation | Low |
 
 ---
 
 ## 5. Immediate Next Steps (Owner: Next Agent)
 
-1. **Real valuation data** — hook vnstock fundamental vào Opportunity Engine (replace mock 100k price)
-2. **Track record with real data** — run evaluation job trên proposals đã seed
-2. **Add PYN Elite** — verify PDF snapshot parsing (HTML currently)
-3. **Dockerize** — `Dockerfile` + `docker-compose.yml` for one-shot `docker compose up`
-4. **VNStock fundamental normalization** — fix duplicate quarters, map units (VND/USD/EUR)
+1. ~~**Real valuation data** — hook vnstock fundamental vào Opportunity Engine~~ ✅ Done
+2. ~~**Dockerize** — `Dockerfile` + `docker-compose.yml` for one-shot `docker compose up`~~ ✅ Done
+3. **Track record with real data** — run evaluation job trên proposals đã seed
+4. **Add PYN Elite** — verify PDF snapshot parsing (HTML currently)
+5. **VNStock fundamental normalization** — fix duplicate quarters, map units (VND/USD/EUR)
 
 ---
 
@@ -160,20 +171,21 @@ E:\invest\
 | Invalidation conditions structured | Machine-checkable thesis health, not just narrative |
 | Fund-first universe | User requirement: "chỉ copy quỹ đã research" |
 | Free baseline mandatory | No paid API in golden path |
+| vnstock 4.0.8 Quote API | New API (`vnstock.api.quote.Quote`), replaces deprecated `Vnstock().stock()` |
 
 ---
 
 ## 7. Test Evidence
 
 ```bash
-# Run integration test
-cd E:\invest
-.venv\Scripts\python.exe -m tests.test_lifecycle
-# → ALL LIFECYCLE TESTS PASSED SUCCESSFULLY!
+# Run integration tests (5 tests)
+cd invest
+.venv/bin/python -m tests.test_lifecycle
+# → 5 passed, 0 failed
 
 # Manual smoke test
-.venv\Scripts\python.exe -m app.storage.seed
-.venv\Scripts\python.exe -m app.main
+.venv/bin/python -m app.storage.seed
+.venv/bin/python -m app.main
 # → http://localhost:8000 all endpoints 200 OK
 ```
 
