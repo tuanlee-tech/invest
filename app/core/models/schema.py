@@ -33,6 +33,8 @@ class FundHoldingSnapshot(Base):
     retrieved_at = Column(DateTime, default=datetime.now(timezone.utc))
     source_url = Column(String(512), nullable=True)
     source_hash = Column(String(64), nullable=True)  # sha256
+    reporting_period = Column(String(32), nullable=True)  # e.g. "2026-07"
+    effective_date = Column(Date, nullable=True)  # date the holdings are effective (may differ from as_of_date)
     raw_text = Column(Text, nullable=True)
     holdings_json = Column(JSON, nullable=False)  # list of {ticker, weight_pct, sector, ...}
 

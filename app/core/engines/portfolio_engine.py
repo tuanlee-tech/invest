@@ -9,6 +9,42 @@ from app.llm.client import OpenCodeClient
 logger = logging.getLogger(__name__)
 
 
+def evaluate_invalidation_conditions(conditions: Optional[List[Dict[str, Any]]],
+                                     current_price: float) -> List[Dict[str, Any]]:
+    """Deterministically check price-based invalidation conditions.
+
+    Only conditions with data_source starting 'price' and a numeric
+    threshold_value are machine-checkable (market data is live; financial
+    series are not persisted — those stay with the LLM). Returns triggered rows.
+    """
+    triggered = []
+    if not conditions or not current_price:
+        return triggered
+    ops = {
+        "<": lambda v, t: v < t,
+        "<=": lambda v, t: v <= t,
+        ">": lambda v, t: v > t,
+        ">=": lambda v, t: v >= t,
+        "==": lambda v, t: v == t,
+    }
+    for cond in conditions:
+        if not isinstance(cond, dict):
+            continue
+        src = str(cond.get("data_source") or "").lower()
+        if not src.startswith("price"):
+            continue
+        try:
+            threshold = float(cond.get("threshold_value"))
+        except (TypeError, ValueError):
+            continue
+        op = ops.get(str(cond.get("comparison") or "<"))
+        if op is None:
+            continue
+        if op(current_price, threshold):
+            triggered.append(cond)
+    return triggered
+
+
 class PortfolioEngine:
     """Manages active portfolio positions and event-driven re-evaluations"""
 
@@ -39,8 +75,12 @@ class PortfolioEngine:
 
     def get_current_price(self, ticker: str) -> float:
         """Get current market price from vnstock"""
-        from app.core.engines.market_data import get_latest_price
-        price = get_latest_price(ticker)
+        from app.core.engines.market_data import get_latest_price, MarketDataError
+        try:
+            price = get_latest_price(ticker)
+        except MarketDataError as e:
+            logger.warning("Market data unavailable for %s: %s", ticker, e)
+            return 0.0
         return price if price else 0.0
 
     def reevaluate_all_positions(self) -> Dict[str, Any]:
@@ -52,7 +92,8 @@ class PortfolioEngine:
             "positions_checked": len(positions),
             "revisions_created": 0,
             "actions": {},
-            "invalidation_alerts": []
+            "invalidation_alerts": [],
+            "errors": 0,
         }
 
         for pos in positions:
@@ -61,28 +102,74 @@ class PortfolioEngine:
             events = self.get_recent_events_for_ticker(ticker)
             current_price = self.get_current_price(ticker)
 
-            # Re-evaluate position using LLM
-            evaluation = self.llm.reevaluate_position(
-                ticker=ticker,
-                avg_buy_price=pos.avg_buy_price,
-                current_price=current_price,
-                current_thesis=proposal.thesis if proposal else "No active proposal",
-                invalidation_conditions=proposal.invalidation_conditions if proposal else [],
-                new_events=events,
+            conditions = proposal.invalidation_conditions if proposal else []
+            triggered = evaluate_invalidation_conditions(conditions, current_price)
+            critical_hit = any(
+                str(c.get("severity", "CRITICAL")).upper() == "CRITICAL" for c in triggered
             )
 
-            new_action = evaluation.get("action", "HOLD")
-            thesis_health = evaluation.get("thesis_health", "HEALTHY")
-            invalidation_triggered = evaluation.get("invalidation_triggered", False)
+            # LLM evaluation is best-effort; deterministic price checks run regardless
+            evaluation: Dict[str, Any] = {}
+            llm_error = None
+            try:
+                evaluation = self.llm.reevaluate_position(
+                    ticker=ticker,
+                    avg_buy_price=pos.avg_buy_price,
+                    current_price=current_price,
+                    current_thesis=proposal.thesis if proposal else "No active proposal",
+                    invalidation_conditions=conditions,
+                    new_events=events,
+                )
+                if not isinstance(evaluation, dict):
+                    raise ValueError(f"evaluation is not an object: {type(evaluation).__name__}")
+            except Exception as e:
+                llm_error = e
+                logger.error("LLM re-evaluation failed for %s: %s", ticker, e)
+
+            new_action = str(evaluation.get("action") or "HOLD").upper()
+            if new_action not in {"ADD", "HOLD", "REDUCE", "EXIT"}:
+                new_action = "HOLD"
+            thesis_health = str(evaluation.get("thesis_health") or "HEALTHY").upper()
+            if thesis_health not in {"HEALTHY", "AT_RISK", "INVALIDATED"}:
+                thesis_health = "HEALTHY"
+            invalidation_triggered = bool(evaluation.get("invalidation_triggered"))
+
+            # Deterministic override: a CRITICAL price condition beats the LLM
+            if critical_hit:
+                thesis_health = "INVALIDATED"
+                new_action = "EXIT"
+                invalidation_triggered = True
+            elif triggered:
+                thesis_health = "AT_RISK"
+                invalidation_triggered = True
+
+            if llm_error and not triggered:
+                # No LLM verdict and no deterministic trigger → leave state untouched
+                results["errors"] += 1
+                results["actions"][ticker] = pos.current_action
+                continue
+
+            for cond in triggered:
+                results["invalidation_alerts"].append({
+                    "ticker": ticker,
+                    "condition_id": cond.get("condition_id"),
+                    "reason": cond.get("description"),
+                    "current_price": current_price,
+                    "threshold_value": cond.get("threshold_value"),
+                    "comparison": cond.get("comparison"),
+                    "severity": cond.get("severity", "CRITICAL"),
+                })
 
             # Update position state
             pos.current_action = new_action
             pos.thesis_health = thesis_health
 
-            if invalidation_triggered:
+            if invalidation_triggered and not any(
+                a.get("ticker") == ticker for a in results["invalidation_alerts"]
+            ):
                 results["invalidation_alerts"].append({
                     "ticker": ticker,
-                    "reason": evaluation.get("explanation")
+                    "reason": evaluation.get("explanation") or "invalidation triggered",
                 })
 
             # If proposal exists and action changed or targets revised, create revision

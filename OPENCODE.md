@@ -66,13 +66,22 @@ GET  /ui/{dashboard|shortlist|portfolio|events|track-record|settings}
 - Views: Dashboard, Shortlist, Portfolio, Events, Track Record, Settings
 - Proposal detail modal with revision history, evidence links
 
-## Current Seed Data
-- **Funds**: VEIL, VESAF, VCBF-BCF, PYN
-- **Holdings**: Tháng 8/2026 (VEIL 10, VESAF 10, VCBF-BCF 5)
-- **Securities**: 15 tickers (HPG, MWG, CTG, MBB, VCB, FPT, TCB, ACB, VIC, VHM, BID, VPB, MSN, CTR, BVH)
-- **Events**: 2 (steel price ↑ → HPG positive, BHX profitable → MWG positive)
-- **Proposals**: HPG v3 (BUY), MWG v1 (BUY)
-- **Position**: HPG 2000 shares @ 27,500
+## Current Data (counts + provenance, verified 2026-09-24)
+Legend: **LIVE** = fetched at runtime (vnstock/PDF/RSS); **SEED** = hardcoded `app/storage/seed.py`; **MANUAL** = hand-entered.
+
+| Record | Actual state | Provenance |
+|--------|--------------|------------|
+| Funds | 6: VEIL, VESAF, VCBF-BCF, PYN, SSI-SCA, DCDS | SEED |
+| Holdings snapshots | 9 = VEIL/VESAF/VCBF-BCF × {Jul, Aug, Sep 2026}; `source_url`/`source_hash` NULL | SEED |
+| PYN / SSI-SCA / DCDS snapshots | **0 rows** (PYN parser exists but seed never inserts; no SSI-SCA/DCDS parser) | — |
+| Securities | 17 tickers (… + GAS, NVL) | SEED |
+| Events | 4 (steel→HPG, retail→MWG, FPT-AI, CTG-capital) | SEED + MANUAL causal links |
+| Proposals | 4, all `version=1` `ACTIVE`: HPG-v1, MWG-v1, FPT-v1, CTG-v1. **No HPG v3 in DB** | SEED (`model_run_id=NULL`) |
+| Positions | 3: HPG open 2000 @ 27,500; FPT + CTG CLOSED (hand-set prices/PnL) | MANUAL |
+| Transactions | 0 | — |
+| Proposal evaluations | 2 (FPT +54.2%, CTG +37.4%) computed from vnstock, persisted | LIVE-derived |
+| Prices / OHLCV / fundamentals | not persisted; hit vnstock on demand | LIVE |
+| Corporate actions | in-code dict, 8 tickers, split-only; dividends no-op | MANUAL |
 
 ## Test Suite
 ```bash
@@ -81,21 +90,23 @@ python -m tests.test_lifecycle
 # All pass
 ```
 
-## Known Gaps (Priority Order)
-1. **Valuation engine**: Mock price → real DCF/comps/residual income
-2. **Fundamentals normalization**: vnstock ratios duplicate quarters, unit mapping
-3. **Corporate actions**: Split/dividend/rights price adjustment
-4. **Historical holdings**: Need ≥3 snapshots/fund for trend detection
-5. **Causal graph**: Manual links → sector/supply-chain knowledge graph
-6. **LLM benchmark**: Vietnamese eval set (extraction/causal/valuation)
-7. **Docker**: Dockerfile + compose.yml for one-shot deploy
-8. **Legal**: Disclaimer, data license audit (vnstock, RSS, PDF sources)
+## Known Gaps (verified against code/DB 2026-09-24)
+1. **Provenance**: `source_url`/`source_hash` columns exist but NULL on all 9 snapshots — nothing is marked LIVE vs SEED (roadmap Phase 0/1).
+2. **Holdings coverage**: only 3 funds have snapshots (seeded). PYN = 0 rows despite parser; SSI-SCA/DCDS = no parser.
+3. **`GET /health`**: endpoint does not exist yet.
+4. **Proposal status**: expired FPT/CTG still `ACTIVE`; no auto-expire.
+5. **Corporate actions**: module exists (`corporate_actions.py`) but MANUAL dict, split-only, dividend adjust is a no-op, unverified.
+6. **Track record**: only 2/4 proposals evaluated (FPT, CTG); HPG/MWG pending.
+7. **LLM benchmark**: Vietnamese eval set (extraction/causal/valuation) — not started.
+8. **Prices not persisted**: every valuation/evaluation call hits vnstock live (rate-limit exposure; retries exist, no cache).
+
+Done since earlier version of this list: real valuation via vnstock, fundamentals normalization, 3-month historical snapshots, auto causal graph, Dockerfile+compose, DISCLAIMER/`/api/disclaimer`.
 
 ## Immediate Next Steps (If Continuing)
-1. Hook vnstock fundamental vào Opportunity Engine (replace mock price)
-2. Run evaluation job on seeded proposals → populate track record
-3. Add PYN Elite (verify PDF snapshot parsing)
-4. Dockerize: `Dockerfile` + `docker-compose.yml`
+1. Add `GET /health` + persist snapshot provenance + mark/flip expired proposals (roadmap Phase 0/1).
+2. Insert or ingest PYN snapshot; add SSI-SCA/DCDS parsers or mark them manual-format.
+3. Run evaluation for HPG + MWG → full track record.
+4. Docker hardening: non-root user, healthcheck (roadmap Phase 4).
 
 ## Key Files to Read
 - `HANDOFF.md` — Complete project summary

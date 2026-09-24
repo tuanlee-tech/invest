@@ -347,8 +347,11 @@ def remove_from_watchlist(ticker: str, db: Session = Depends(get_db)):
 @api.get("/prices/{ticker}")
 def get_price(ticker: str):
     """Get latest price for a ticker from vnstock"""
-    from app.core.engines.market_data import get_latest_price
-    price = get_latest_price(ticker)
+    from app.core.engines.market_data import get_latest_price, MarketDataError
+    try:
+        price = get_latest_price(ticker)
+    except MarketDataError as e:
+        raise HTTPException(502, str(e))
     if price is None:
         raise HTTPException(404, f"Price not found for {ticker}")
     return {"ticker": ticker, "price": price, "source": "vnstock"}
@@ -357,11 +360,15 @@ def get_price(ticker: str):
 @api.get("/prices")
 def get_prices(tickers: str = ""):
     """Get latest prices for multiple tickers (comma-separated)"""
-    from app.core.engines.market_data import get_latest_price
+    from app.core.engines.market_data import get_latest_price, MarketDataError
     ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
     result = {}
     for t in ticker_list:
-        price = get_latest_price(t)
+        try:
+            price = get_latest_price(t)
+        except MarketDataError as e:
+            result[t] = {"price": None, "error": str(e)}
+            continue
         result[t] = {"price": price, "source": "vnstock"} if price else {"price": None, "error": "not found"}
     return result
 

@@ -1,4 +1,26 @@
-"""Corporate actions adjustment — split, dividend, rights price normalization."""
+"""Corporate actions adjustment — split, dividend, rights price normalization.
+
+MANUAL DATA FORMAT (hand-curated; no verified live feed yet — see roadmap Phase 1):
+    CORPORATE_ACTIONS_DB = {
+        "HPG": [
+            {"type": "split",   "date": "2022-01-15", "ratio": 2.0, "description": "2:1 stock split"},
+            {"type": "dividend", "date": "2023-04-20", "amount": 2000, "description": "2,000 VND/share"},
+            {"type": "rights",  "date": "2021-06-01", "ratio": 1.5, "description": "3:2 rights issue"},
+            {"type": "bonus",   "date": "2020-05-01", "ratio": 1.1, "description": "10% bonus shares"},
+        ]
+    }
+    - type: split | dividend | rights | bonus
+    - date: ISO "YYYY-MM-DD" (ex-date)
+    - ratio: price divisor for split/rights/bonus (2.0 = 2:1 → price / 2.0)
+    - amount: cash VND per share for dividend
+
+ADJUSTMENT WINDOW: only actions with `since < date <= as_of` are applied when a
+window is given, so events before the window start do not distort a return
+calculation. `since=None` (default) applies every action up to `as_of`.
+
+Provenance: MANUAL. Rights without `ratio` and dividends without `amount` are
+skipped (never fabricated).
+"""
 from datetime import date
 from typing import Optional, List, Dict, Any
 from enum import Enum
@@ -40,63 +62,91 @@ CORPORATE_ACTIONS_DB: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
+# Actions that divide price (share-count dilution events)
+_RATIO_TYPES = {"split", "rights", "bonus"}
+
 
 def get_actions_for_ticker(ticker: str, since: Optional[date] = None) -> List[Dict[str, Any]]:
-    """Get corporate actions for a ticker, optionally filtered by date."""
+    """Get corporate actions for a ticker; if `since` given, only actions after it."""
     actions = CORPORATE_ACTIONS_DB.get(ticker, [])
     if since:
-        actions = [a for a in actions if date.fromisoformat(a["date"]) >= since]
+        actions = [a for a in actions if date.fromisoformat(a["date"]) > since]
     # Sort by date ascending
     actions.sort(key=lambda a: a["date"])
     return actions
 
 
-def adjust_price_for_splits(ticker: str, raw_price: float, as_of: date) -> float:
+def _in_window(action_date: date, since: Optional[date], as_of: date) -> bool:
+    """True when since < action_date <= as_of (or all dates <= as_of when since is None)."""
+    if action_date > as_of:
+        return False
+    if since is not None and action_date <= since:
+        return False
+    return True
+
+
+def adjust_price_for_splits(ticker: str, raw_price: float, as_of: date,
+                            since: Optional[date] = None) -> float:
+    """Adjust a raw price for split/rights/bonus events in (since, as_of].
+
+    2:1 split → price halved. Events at or before `since` are ignored so a
+    return window starting after them is not distorted.
     """
-    Adjust a raw price for all stock splits that occurred before as_of.
-    For example: 2:1 split means price should be halved.
-    """
-    actions = get_actions_for_ticker(ticker, since=None)
     adjusted = raw_price
-    for action in actions:
-        if action["type"] == "split":
-            action_date = date.fromisoformat(action["date"])
-            if action_date <= as_of:
-                adjusted = adjusted / action["ratio"]
+    for action in get_actions_for_ticker(ticker, since=None):
+        if action.get("type") not in _RATIO_TYPES:
+            continue
+        ratio = action.get("ratio")
+        if not ratio:
+            continue  # never fabricate a ratio
+        action_date = date.fromisoformat(action["date"])
+        if _in_window(action_date, since, as_of):
+            adjusted = adjusted / float(ratio)
     return adjusted
 
 
-def adjust_price_for_dividends(ticker: str, raw_price: float, as_of: date) -> float:
+def adjust_price_for_dividends(ticker: str, raw_price: float, as_of: date,
+                               since: Optional[date] = None) -> float:
+    """Subtract cash dividends paid in (since, as_of] from the price basis.
+
+    total return = (end - (start - dividends)) / start == (end + div - start) / start
     """
-    Adjust a raw price for cash dividends (price drops by dividend amount on ex-date).
-    Note: This is simplified - real dividend adjustment needs more data.
-    """
-    # Dividend adjustment requires dividend amount data which we don't have
-    # For now, return raw price
-    return raw_price
+    dividends = 0.0
+    for action in get_actions_for_ticker(ticker, since=None):
+        if action.get("type") != "dividend":
+            continue
+        amount = action.get("amount")
+        if amount is None:
+            continue  # skip incomplete records rather than guess
+        action_date = date.fromisoformat(action["date"])
+        if _in_window(action_date, since, as_of):
+            dividends += float(amount)
+    return raw_price - dividends
 
 
-def get_adjusted_price(ticker: str, raw_price: float, as_of: date) -> float:
-    """
-    Get fully adjusted price (splits + dividends) for a ticker at a given date.
-    """
-    adjusted = adjust_price_for_splits(ticker, raw_price, as_of)
-    adjusted = adjust_price_for_dividends(ticker, adjusted, as_of)
+def get_adjusted_price(ticker: str, raw_price: float, as_of: date,
+                       since: Optional[date] = None) -> float:
+    """Fully adjusted price (splits/rights/bonus + dividends) in window (since, as_of]."""
+    adjusted = adjust_price_for_splits(ticker, raw_price, as_of, since=since)
+    adjusted = adjust_price_for_dividends(ticker, adjusted, as_of, since=since)
     return adjusted
 
 
-def get_adjustment_factor(ticker: str, as_of: date) -> float:
+def get_adjustment_factor(ticker: str, as_of: date, since: Optional[date] = None) -> float:
+    """Cumulative ratio factor for split/rights/bonus in (since, as_of].
+
+    Factor > 1 means the past price sits on a larger pre-dilution scale.
     """
-    Get the cumulative adjustment factor for a ticker up to a date.
-    Factor > 1 means price was higher in the past (after adjusting down for splits).
-    """
-    actions = get_actions_for_ticker(ticker, since=None)
     factor = 1.0
-    for action in actions:
-        if action["type"] == "split":
-            action_date = date.fromisoformat(action["date"])
-            if action_date <= as_of:
-                factor *= action["ratio"]
+    for action in get_actions_for_ticker(ticker, since=None):
+        if action.get("type") not in _RATIO_TYPES:
+            continue
+        ratio = action.get("ratio")
+        if not ratio:
+            continue
+        action_date = date.fromisoformat(action["date"])
+        if _in_window(action_date, since, as_of):
+            factor *= float(ratio)
     return factor
 
 
@@ -109,7 +159,7 @@ def add_corporate_action(ticker: str, action_type: ActionType, action_date: date
         "date": action_date.isoformat(),
         "description": description,
     }
-    if action_type == ActionType.SPLIT and ratio:
+    if action_type in (ActionType.SPLIT, ActionType.RIGHTS, ActionType.BONUS) and ratio:
         action["ratio"] = ratio
     elif action_type == ActionType.DIVIDEND and amount:
         action["amount"] = amount

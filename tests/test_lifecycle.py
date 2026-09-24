@@ -37,6 +37,37 @@ def test_evaluation_engine():
         engine.close()
 
 
+def test_proposal_auto_expire():
+    """Proposals past valid_until are flipped ACTIVE -> EXPIRED by the evaluation job."""
+    from datetime import datetime, timezone
+    from app.core.engines.evaluation_engine import EvaluationEngine
+    from app.core.models.schema import SessionLocal, Proposal
+
+    engine = EvaluationEngine()
+    try:
+        result = engine.evaluate_settled_proposals()
+        assert "expired" in result, f"expected 'expired' in {result}"
+    finally:
+        engine.close()
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        stale = db.query(Proposal).filter(
+            Proposal.valid_until <= now,
+            Proposal.status == "ACTIVE",
+        ).all()
+        assert not stale, f"stale ACTIVE proposals: {[p.id for p in stale]}"
+
+        live = db.query(Proposal).filter(
+            Proposal.valid_until > now,
+            Proposal.status == "ACTIVE",
+        ).all()
+        assert live, "future proposals must remain ACTIVE"
+    finally:
+        db.close()
+
+
 def test_market_data():
     """Test vnstock market data wrapper returns real prices."""
     from app.core.engines.market_data import get_latest_price
@@ -73,8 +104,30 @@ def test_causal_graph():
     assert any(l["target_ticker"] == "HPG" for l in links), "Should link steel event to HPG"
 
 
+def test_health():
+    """GET /health reports DB + market-data + LLM status, 503 with clear errors on failure."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    r = client.get("/health")
+    assert r.status_code in (200, 503), f"unexpected status {r.status_code}"
+    body = r.json()
+    deps = body.get("dependencies", {})
+    assert set(deps) == {"database", "market_data", "llm"}, f"missing deps: {deps.keys()}"
+    for name, res in deps.items():
+        assert res.get("status") in ("ok", "error"), f"{name}: {res}"
+        if res["status"] != "ok":
+            assert res.get("error"), f"{name} failed without an error message: {res}"
+    if r.status_code == 503:
+        assert "error" in body and "failed dependencies" in body["error"]
+    else:
+        assert body["status"] == "ok"
+
+
 if __name__ == "__main__":
-    tests = [test_seed_and_api, test_evaluation_engine, test_market_data, test_fundamentals, test_causal_graph]
+    tests = [test_seed_and_api, test_evaluation_engine, test_proposal_auto_expire,
+             test_market_data, test_fundamentals, test_causal_graph, test_health]
     passed = 0
     failed = 0
     for t in tests:

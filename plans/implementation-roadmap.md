@@ -7,7 +7,7 @@
 
 ## Agent Instructions
 
-1. Read `HANDOFF.md`, `plans/architecture-proposal.md`, and the current Git diff before editing.
+1. Read `HANDOFF.md`, `OPENCODE.md`, `plans/architecture-proposal.md`, and the current Git diff before editing.
 2. Do not revert existing user or agent changes.
 3. Prefer the smallest change that satisfies the acceptance criteria.
 4. Update this file by checking completed items and recording blockers.
@@ -16,25 +16,28 @@
 
 ## Current Baseline
 
-- FastAPI + SQLite + SQLAlchemy application runs locally.
-- Docker files and Alembic initial migration exist.
-- Six fund configurations are present, but several holdings are seeded/manual.
-- Live vnstock price endpoint exists.
-- Corporate-action adjustment module exists and needs broader verification.
-- Retry decorators exist and are applied to market-data functions.
+- FastAPI + SQLite + SQLAlchemy application runs locally; `GET /health` returns 200 when DB + vnstock + OpenCode binary are healthy (503 with per-dependency errors otherwise).
+- Docker files and Alembic migrations (`alembic upgrade head` → `a1b2c3d4e5f6`) exist and run against `settings.DATABASE_URL`.
+- Six fund configurations. Holdings provenance (verified 2026-09-24 after Phase 0/1 work):
+  - **SEED** — historical snapshots for VEIL/VESAF/VCBF-BCF (Jul/Aug/Sep 2026), sample SSI-SCA/DCDS rows; 6 funds, 17 securities, 4 events (manual causal links), 4 proposals.
+  - **MANUAL** — 3 positions (closed prices/PnL hand-set), corporate-actions dict (documented manual format: split/rights/bonus `ratio`, dividend `amount`; 8 tickers).
+  - **LIVE** — prices/OHLCV/fundamentals (vnstock, 60s/300s TTL cache, not persisted), fund-PDF/HTML ingestion (VEIL, VESAF, PYN parsed live; VCBF-BCF fails visibly; SSI-SCA/DCDS explicitly not-implemented), 2 proposal evaluations (FPT, CTG).
+  - **Provenance** — all 13 snapshots have `source_url`/`source_hash`/`reporting_period`/`effective_date` (0 NULL); re-ingest never overwrites an existing `(fund_id, as_of_date)` row.
+- Live vnstock price endpoint with short-lived cache; `vnstock_retry` retries only transient failures (timeout/connection/5xx/429), permanent errors fail fast as `MarketDataError`.
+- Expired proposals are flipped `ACTIVE → EXPIRED` by the evaluation job (FPT, CTG now `EXPIRED`; HPG, MWG still `ACTIVE`).
 - OpenCode LLM client has Ollama fallback routing, but Ollama is not installed/tested locally.
-- Lifecycle test currently passes: `5 passed, 0 failed`.
-- `HANDOFF.md` contains stale statements about corporate actions and Ollama; update it after implementation work.
+- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5 (26 total).
+- `HANDOFF.md`, `OPENCODE.md`, and this roadmap reconciled 2026-09-24 (provenance tables, health, market-data, corporate-actions updates).
 
 ## Phase 0: Establish A Reliable Baseline
 
 **Priority**: P0
 
-- [ ] Add `GET /health` with database, market-data, and LLM-provider status.
-- [ ] Verify a clean database can be created with Alembic, then seeded without errors.
-- [ ] Define which records are live, seeded, or fallback/manual data.
-- [ ] Reconcile stale claims in `HANDOFF.md` and this roadmap.
-- [ ] Confirm the documented local and Docker startup paths.
+- [x] Add `GET /health` with database, market-data, and LLM-provider status.
+- [x] Verify a clean database can be created with Alembic, then seeded without errors.
+- [x] Define which records are live, seeded, or fallback/manual data.
+- [x] Reconcile stale claims in `HANDOFF.md` and this roadmap.
+- [x] Confirm the documented local and Docker startup paths.
 
 **Acceptance criteria**
 
@@ -52,28 +55,28 @@ The health response must identify dependency failures instead of returning a mis
 
 ### Fund ingestion
 
-- [ ] Complete or explicitly mark parsers for VCBF-BCF, SSI-SCA, DCDS, and PYN Elite.
-- [ ] Persist source URL, retrieval timestamp, file hash, reporting period, and effective date for every holdings snapshot.
-- [ ] Preserve old snapshots; never overwrite point-in-time data.
-- [ ] Record parser failures with source and error details.
+- [x] Complete or explicitly mark parsers for VCBF-BCF, SSI-SCA, DCDS, and PYN Elite. (Live: VEIL, VESAF, PYN ✓; VCBF-BCF fails visibly with source+error; SSI-SCA/DCDS in `NOT_IMPLEMENTED_PARSERS` with reason — no fabricated rows.)
+- [x] Persist source URL, retrieval timestamp, file hash, reporting period, and effective date for every holdings snapshot. (13/13 rows populated; seed rows use `seed:app/storage/seed.py` + sha256 of holdings; live rows use real URL/hash.)
+- [x] Preserve old snapshots; never overwrite point-in-time data. (`save_snapshot` no-ops on existing `(fund_id, as_of_date)`; covered by `test_no_overwrite_on_reingest`.)
+- [x] Record parser failures with source and error details. (`results["failures"]` in job response + structured logging.)
 
 ### Holdings normalization
 
-- [ ] Normalize ticker, percentage, currency, units, and snapshot date.
-- [ ] Detect duplicate holdings in one snapshot.
-- [ ] Validate allocation totals and report cash/other assets separately.
+- [x] Normalize ticker, percentage, currency, units, and snapshot date. (`normalize_holdings` handles `7.5%`, `7,5%`, `1,234.5`.)
+- [x] Detect duplicate holdings in one snapshot. (`duplicates` in job result + warning log.)
+- [x] Validate allocation totals and report cash/other assets separately. (`allocation.{equities,cash,other,total}_pct`, 0.5% tolerance.)
 
 ### Market data
 
-- [ ] Cache short-lived price responses to protect vnstock rate limits.
-- [ ] Retry only transient failures such as timeout, connection failure, and HTTP 5xx.
-- [ ] Return explicit provider/data errors for invalid symbols or malformed responses.
+- [x] Cache short-lived price responses to protect vnstock rate limits. (60s price / 300s history TTL cache in `market_data.py`.)
+- [x] Retry only transient failures such as timeout, connection failure, and HTTP 5xx. (`retry_if=is_transient_error`; permanent errors raise immediately.)
+- [x] Return explicit provider/data errors for invalid symbols or malformed responses. (`MarketDataError`; price endpoints map it to HTTP 502.)
 
 ### Corporate actions
 
-- [ ] Add verified split, dividend, and rights-issue data sources or a clearly documented manual data format.
-- [ ] Add tests for each adjustment type.
-- [ ] Verify historical returns, drawdown, and P&L before and after adjustments.
+- [x] Add verified split, dividend, and rights-issue data sources or a clearly documented manual data format. (Manual format documented in `corporate_actions.py` docstring; dividend `amount`, rights/bonus `ratio` supported; incomplete records skipped, never fabricated.)
+- [x] Add tests for each adjustment type. (`tests/test_market_data_unit.py`: split window, dividend, rights, factor, combined.)
+- [x] Verify historical returns, drawdown, and P&L before and after adjustments. (Adjustments windowed to `(start, end]` so pre-window events cannot distort returns; covered by split-window tests.)
 
 **Acceptance criteria**
 
@@ -87,28 +90,28 @@ The health response must identify dependency failures instead of returning a mis
 
 ### Causal graph
 
-- [ ] Implement and verify `event -> sector -> ticker -> fund holding -> proposal` links.
-- [ ] Store classification (`FACT`, `INFERENCE`, `FORECAST`), mechanism, direction, confidence, source event, and timestamp.
-- [ ] Add tests for positive, negative, and irrelevant event links.
+- [x] Implement and verify `event -> sector -> ticker -> fund holding -> proposal` links. (Graph links merge with LLM links; relevance uses the merged set; proposals check fund holdings and store `evidence_refs`.)
+- [x] Store classification (`FACT`, `INFERENCE`, `FORECAST`), mechanism, direction, confidence, source event, and timestamp. (`enrich_link` contract on every link in `Event.causal_links`.)
+- [x] Add tests for positive, negative, and irrelevant event links. (`tests/test_phase2.py`.)
 
 ### Opportunity engine
 
-- [ ] Use normalized fundamentals in scoring.
-- [ ] Prevent duplicate proposals across repeated scans.
-- [ ] Create a new version only when an event, holding, fundamental, or thesis materially changes.
-- [ ] Preserve `changed_from_previous` and all evidence references.
+- [x] Use normalized fundamentals in scoring. (`normalize_income` fed into `generate_proposal`.)
+- [x] Prevent duplicate proposals across repeated scans. (One ACTIVE proposal per ticker blocks a new group regardless of age; result reports `proposals_skipped`. EXPIRED/REVISED allow a fresh group.)
+- [ ] Create a new version only when an event, holding, fundamental, or thesis materially changes. (Revisions exist via portfolio re-eval + revise API; automatic material-change detection not implemented.)
+- [x] Preserve `changed_from_previous` and all evidence references. (Set on create and on every revision.)
 
 ### Portfolio re-evaluation
 
-- [ ] Evaluate structured invalidation conditions automatically.
-- [ ] Persist thesis health as `HEALTHY`, `AT_RISK`, or `INVALIDATED`.
-- [ ] Preserve every ADD/HOLD/REDUCE/EXIT decision as history.
-- [ ] Keep all trading execution manual and out of scope.
+- [x] Evaluate structured invalidation conditions automatically. (Price-based conditions machine-checked before LLM; financial-series conditions remain LLM-judged — no persisted financial series.)
+- [x] Persist thesis health as `HEALTHY`, `AT_RISK`, or `INVALIDATED`. (`Position.thesis_health`; CRITICAL price trigger forces `INVALIDATED` + `EXIT` regardless of LLM.)
+- [ ] Preserve every ADD/HOLD/REDUCE/EXIT decision as history. (Only action *changes* create a revision; unchanged HOLDs are not journaled.)
+- [x] Keep all trading execution manual and out of scope.
 
 ### Track record
 
-- [ ] Run evaluation on seeded proposals using point-in-time market data.
-- [ ] Calculate return by horizon, target/stop outcomes, invalidation outcome, win rate, and confidence calibration.
+- [x] Run evaluation on seeded proposals using point-in-time market data. (FPT, CTG evaluated and flipped to `EXPIRED`; HPG, MWG not yet settled — `valid_until` in 2027.)
+- [ ] Calculate return by horizon, target/stop outcomes, invalidation outcome, win rate, and confidence calibration. (Win rate + confidence calibration exist; `entry_hit`/`target_hit`/`stop_hit` columns are never set.)
 - [ ] Slice results by ticker, fund, action, model, and prompt version.
 
 **Acceptance criteria**
@@ -124,15 +127,15 @@ The health response must identify dependency failures instead of returning a mis
 ### LLM provider boundary
 
 - [ ] Keep OpenCode/free models as the default path.
-- [ ] Verify Ollama detection, model availability, timeout, and fallback behavior when installed.
+- [ ] Verify Ollama detection, model availability, timeout, and fallback behavior when installed. (Routing implemented in `app/llm/client.py`; Ollama absent on this machine — untested.)
 - [ ] Log provider, model, latency, and failure reason without logging secrets.
 - [ ] If all providers fail, persist the event and mark the proposal job `LLM_FAILED`; never invent a proposal.
 
 ### Structured output
 
-- [ ] Validate every LLM response with Pydantic before database insertion.
-- [ ] Reject invalid action, confidence, price ranges, position size, and missing invalidation conditions.
-- [ ] Store raw model output only for debugging/audit, not as trusted UI data.
+- [x] Validate every LLM response with Pydantic before database insertion. (`validate_llm_proposal` in `app/schemas/domain.py`, called before any Proposal insert.)
+- [x] Reject invalid action, confidence, price ranges, position size, and missing invalidation conditions. (Rejected payloads are logged with reason, never inserted.)
+- [ ] Store raw model output only for debugging/audit, not as trusted UI data. (Currently logged on rejection only; no audit column.)
 
 ### Scheduler
 
@@ -172,9 +175,9 @@ The health response must identify dependency failures instead of returning a mis
 ### Docker
 
 - [ ] Run the container as a non-root user.
-- [ ] Add a Compose healthcheck.
-- [ ] Persist database and logs through volumes.
-- [ ] Verify restart does not lose data.
+- [x] Add a Compose healthcheck. (hits `/health`; container reported `healthy` 2026-09-24.)
+- [x] Persist database and logs through volumes. (`./data:/app/data`; logs via `docker compose logs`.)
+- [x] Verify restart does not lose data. (`restart: unless-stopped` + volume; provenance/proposals survive recreate.)
 
 ## Phase 5: Test And Release
 

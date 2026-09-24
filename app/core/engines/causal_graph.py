@@ -1,5 +1,14 @@
-"""Sector/supply-chain mapping for auto-generating causal links from events."""
-from typing import List, Dict, Any
+"""Sector/supply-chain mapping for auto-generating causal links from events.
+
+Link contract (stored in Event.causal_links JSON):
+    {target_ticker, direction: POSITIVE|NEGATIVE|MIXED, confidence: 0-100,
+     mechanism, classification: FACT|INFERENCE|FORECAST,
+     source_event_id, timestamp, source: causal_graph|llm}
+"""
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+VALID_CLASSIFICATIONS = {"FACT", "INFERENCE", "FORECAST", "COMPUTED"}
 
 # Sector → tickers mapping (HOSE-listed, top holdings)
 SECTOR_TICKERS = {
@@ -37,7 +46,26 @@ EVENT_PATTERNS = {
 }
 
 
-def infer_causal_links(headline: str, summary: str, tickers: List[str]) -> List[Dict[str, Any]]:
+def enrich_link(link: Dict[str, Any], event_id: Optional[str] = None,
+                occurred_at: Optional[datetime] = None,
+                source: str = "llm") -> Dict[str, Any]:
+    """Fill contract fields on a causal link (idempotent; never overwrites valid values)."""
+    out = dict(link)
+    cls = str(out.get("classification") or "").upper()
+    out["classification"] = cls if cls in VALID_CLASSIFICATIONS else "INFERENCE"
+    out.setdefault("direction", "MIXED")
+    out.setdefault("confidence", 50)
+    out.setdefault("mechanism", "")
+    out["source_event_id"] = out.get("source_event_id") or event_id
+    if not out.get("timestamp"):
+        out["timestamp"] = (occurred_at or datetime.now(timezone.utc)).isoformat()
+    out["source"] = out.get("source") or source
+    return out
+
+
+def infer_causal_links(headline: str, summary: str, tickers: List[str],
+                       event_id: Optional[str] = None,
+                       occurred_at: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """Auto-generate causal links from event headline/summary based on sector mapping."""
     text = f"{headline} {summary}".lower()
     links = []
@@ -49,12 +77,13 @@ def infer_causal_links(headline: str, summary: str, tickers: List[str]) -> List[
             # Only include tickers that are in the watched universe
             for ticker in affected_tickers:
                 if ticker in tickers:
-                    links.append({
+                    links.append(enrich_link({
                         "target_ticker": ticker,
                         "direction": info["direction"],
                         "confidence": 70,  # Base confidence for auto-generated
                         "mechanism": info["mechanism"],
-                        "source": "causal_graph",  # Mark as auto-generated
-                    })
+                        "classification": "INFERENCE",
+                        "source": "causal_graph",
+                    }, event_id=event_id, occurred_at=occurred_at, source="causal_graph"))
 
     return links

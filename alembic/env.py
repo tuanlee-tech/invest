@@ -21,6 +21,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.core.models.schema import Base
+from app.config import settings
+
+# Use the app's DATABASE_URL (settings/.env/env vars) instead of the hardcoded ini value
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

@@ -16,6 +16,122 @@ from app.core.models.schema import SessionLocal
 
 logger = logging.getLogger(__name__)
 
+# Parsers not implementable with free sources (Phase 1) — explicitly NOT implemented.
+# No data is fabricated for these funds; skipped entries appear in the job result.
+NOT_IMPLEMENTED_PARSERS = {
+    "SSI-SCA": "not implemented: no free holdings source/parser available",
+    "DCDS": "not implemented: no free holdings source/parser available",
+}
+
+CASH_OR_OTHER = {"CASH", "OTHER"}  # listed separately in allocation validation
+ALLOCATION_TOLERANCE_PCT = 0.5
+
+
+def _parse_weight(value) -> Optional[float]:
+    """Parse a percentage: accepts 7.5, '7.5', '7.5%', '7,5%', '1,234.5'"""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().replace("%", "").strip()
+    if not s:
+        return None
+    if "," in s and "." not in s:
+        s = s.replace(",", ".")   # decimal comma: "95,0" -> 95.0
+    elif "," in s:
+        s = s.replace(",", "")    # thousands separator: "1,234.5" -> 1234.5
+    return float(s)
+
+
+def normalize_holdings(holdings: List[Dict[str, Any]], snapshot_date: Optional[date] = None,
+                       default_currency: str = "VND") -> Dict[str, Any]:
+    """Normalize tickers/weights/currency/snapshot_date; detect duplicates; validate allocation.
+
+    Returns {"holdings", "duplicates", "allocation"}. Cash/other weights are reported
+    separately from equities in the allocation block.
+    """
+    normalized: List[Dict[str, Any]] = []
+    seen = set()
+    duplicates: List[str] = []
+    equities = cash = other = 0.0
+    snap_iso = snapshot_date.isoformat() if isinstance(snapshot_date, date) else snapshot_date
+
+    for h in holdings:
+        ticker = str(h.get("ticker") or "").strip().upper()
+        weight = _parse_weight(h.get("weight_pct"))
+        row = dict(h)
+        row["ticker"] = ticker
+        if weight is not None:
+            row["weight_pct"] = weight
+        row["currency"] = h.get("currency") or default_currency
+        if snap_iso is not None:
+            row["snapshot_date"] = snap_iso
+        normalized.append(row)
+
+        if ticker in seen:
+            duplicates.append(ticker)
+        seen.add(ticker)
+
+        if weight:
+            if ticker in CASH_OR_OTHER:
+                if ticker == "CASH":
+                    cash += weight
+                else:
+                    other += weight
+            else:
+                equities += weight
+
+    total = equities + cash + other
+    allocation = {
+        "equities_pct": round(equities, 4),
+        "cash_pct": round(cash, 4),
+        "other_pct": round(other, 4),
+        "total_pct": round(total, 4),
+        "within_tolerance": abs(total - 100.0) <= ALLOCATION_TOLERANCE_PCT,
+    }
+    if duplicates:
+        logger.warning("Duplicate tickers in snapshot: %s", duplicates)
+    if not allocation["within_tolerance"]:
+        logger.warning("Allocation total %.2f%% deviates from 100%% by more than %.1f%%",
+                       total, ALLOCATION_TOLERANCE_PCT)
+
+    return {"holdings": normalized, "duplicates": duplicates, "allocation": allocation}
+
+
+def save_snapshot(db, fund_id: str, as_of_date: date, holdings: List[Dict[str, Any]],
+                  source_url: Optional[str], source_hash: Optional[str],
+                  raw_text: Optional[str] = None,
+                  reporting_period: Optional[str] = None,
+                  effective_date: Optional[date] = None) -> bool:
+    """Insert a new point-in-time snapshot; never overwrite an existing row.
+
+    Returns True if created, False if a row for (fund_id, as_of_date) already exists.
+    """
+    existing = db.query(FundHoldingSnapshot).filter(
+        FundHoldingSnapshot.fund_id == fund_id,
+        FundHoldingSnapshot.as_of_date == as_of_date,
+    ).first()
+    if existing:
+        logger.info("Snapshot exists for %s @ %s — preserving existing row (no overwrite)",
+                    fund_id, as_of_date)
+        return False
+
+    snapshot = FundHoldingSnapshot(
+        fund_id=fund_id,
+        as_of_date=as_of_date,
+        retrieved_at=datetime.now(timezone.utc),
+        source_url=source_url,
+        source_hash=source_hash,
+        reporting_period=reporting_period or as_of_date.strftime("%Y-%m"),
+        effective_date=effective_date or as_of_date,
+        raw_text=(raw_text or "")[:10000] or None,
+        holdings_json=holdings,
+    )
+    db.add(snapshot)
+    db.commit()
+    logger.info("Saved %d holdings for %s as of %s", len(holdings), fund_id, as_of_date)
+    return True
+
 
 class FundHoldingParser:
     """Parse fund holdings from PDF factsheets and HTML pages"""
@@ -274,23 +390,40 @@ class IngestionPipeline:
         self.market_ingester = MarketDataIngester()
         self.db = SessionLocal()
 
-    def run_fund_ingestion(self) -> Dict[str, int]:
-        """Download and parse latest fund factsheets"""
-        results = {"downloaded": 0, "parsed": 0, "new_snapshots": 0, "errors": 0}
+    def run_fund_ingestion(self) -> Dict[str, Any]:
+        """Download and parse latest fund factsheets.
+
+        Job result includes parser failures (source + error), not-implemented
+        parsers, and per-fund normalization reports (duplicates, allocation).
+        """
+        results: Dict[str, Any] = {
+            "downloaded": 0, "parsed": 0, "new_snapshots": 0, "skipped_existing": 0,
+            "errors": 0, "not_implemented": [], "failures": [], "normalization": [],
+        }
 
         headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
         }
 
+        def record_failure(fund_id: str, source: Optional[str], error: str):
+            results["errors"] += 1
+            results["failures"].append({"fund_id": fund_id, "source": source, "error": error})
+            logger.error("Ingestion failure for %s (source=%s): %s", fund_id, source, error)
+
         for fund_id, fund_config in settings.FUND_SOURCES.items():
+            if fund_id in NOT_IMPLEMENTED_PARSERS:
+                reason = NOT_IMPLEMENTED_PARSERS[fund_id]
+                results["not_implemented"].append({"fund_id": fund_id, "reason": reason})
+                logger.warning("Skipping %s: %s", fund_id, reason)
+                continue
+
+            url = fund_config.get("factsheet_url")
             try:
-                url = fund_config["factsheet_url"]
                 logger.info(f"Downloading {fund_id} from {url}")
 
                 response = requests.get(url, headers=headers, timeout=60)
                 if response.status_code != 200:
-                    logger.warning(f"  Failed: HTTP {response.status_code}")
-                    results["errors"] += 1
+                    record_failure(fund_id, url, f"HTTP {response.status_code}")
                     continue
 
                 raw_content = response.content
@@ -313,45 +446,34 @@ class IngestionPipeline:
                     raw_text = raw_content.decode('utf-8', errors='replace')
                     holdings = self.fund_parser.parse_html(fund_id, raw_text)
                 else:
-                    logger.warning(f"  Unknown content type")
-                    results["errors"] += 1
+                    record_failure(fund_id, url, f"unknown content type: {content_type!r}")
                     continue
                 if not holdings:
-                    logger.warning(f"  No holdings parsed")
-                    results["errors"] += 1
+                    record_failure(fund_id, url, "parser produced 0 rows (no fabricated data inserted)")
                     continue
 
-                # Get as_of_date from filename or use today
                 as_of = date.today()
+                norm = normalize_holdings(holdings, snapshot_date=as_of)
+                results["normalization"].append({
+                    "fund_id": fund_id,
+                    "as_of_date": as_of.isoformat(),
+                    "duplicates": norm["duplicates"],
+                    "allocation": norm["allocation"],
+                })
 
-                # Check if already exists
-                existing = self.db.query(FundHoldingSnapshot).filter(
-                    FundHoldingSnapshot.fund_id == fund_id,
-                    FundHoldingSnapshot.as_of_date == as_of
-                ).first()
-
-                if not existing:
-                    snapshot = FundHoldingSnapshot(
-                        fund_id=fund_id,
-                        as_of_date=as_of,
-                        source_url=url,
-                        source_hash=source_hash,
-                        raw_text=raw_text[:10000],
-                        holdings_json=holdings
-                    )
-                    self.db.add(snapshot)
-                    self.db.commit()
+                if save_snapshot(
+                    self.db, fund_id, as_of, norm["holdings"],
+                    source_url=url, source_hash=source_hash, raw_text=raw_text,
+                ):
                     results["new_snapshots"] += 1
-                    logger.info(f"  Saved {len(holdings)} holdings for {fund_id} as of {as_of}")
                 else:
-                    logger.info(f"  Snapshot already exists for {as_of}")
+                    results["skipped_existing"] += 1
 
                 results["downloaded"] += 1
                 results["parsed"] += 1
 
             except Exception as e:
-                print(f"Error processing {fund_id}: {e}")
-                results["errors"] += 1
+                record_failure(fund_id, url, f"{type(e).__name__}: {e}")
 
         return results
 

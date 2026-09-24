@@ -71,8 +71,12 @@ class OpportunityEngine:
 
     def get_market_data(self, ticker: str) -> Optional[Dict]:
         """Get latest price for ticker from vnstock"""
-        from app.core.engines.market_data import get_latest_price
-        price = get_latest_price(ticker)
+        from app.core.engines.market_data import get_latest_price, MarketDataError
+        try:
+            price = get_latest_price(ticker)
+        except MarketDataError as e:
+            logger.warning("Market data unavailable for %s: %s", ticker, e)
+            return None
         return {"close": price} if price else None
 
     def run_opportunity_scan(self) -> Dict[str, Any]:
@@ -89,33 +93,57 @@ class OpportunityEngine:
             return {"status": "no_new_events", "proposals_created": 0}
 
         # Analyze events for impact on watched tickers
+        from app.core.engines.causal_graph import enrich_link, infer_causal_links
+
         relevant_events = []
+        llm_failures = 0
         for event in events:
-            analysis = self.llm.analyze_event_impact(
-                event.headline,
-                event.summary or "",
-                tickers
+            # LLM analysis is best-effort: on failure the deterministic causal
+            # graph still runs — one bad event must not kill the scan.
+            llm_links: List[Dict[str, Any]] = []
+            llm_entities: List[str] = []
+            try:
+                analysis = self.llm.analyze_event_impact(
+                    event.headline,
+                    event.summary or "",
+                    tickers
+                )
+                if not isinstance(analysis, dict):
+                    raise ValueError(f"analysis is not an object: {type(analysis).__name__}")
+                classification = str(analysis.get("classification") or "FACT").upper()
+                event.classification = classification if classification in (
+                    "FACT", "INFERENCE", "FORECAST", "COMPUTED"
+                ) else "FACT"
+                llm_entities = analysis.get("entities") or []
+                llm_links = [
+                    enrich_link(c, event_id=event.id, occurred_at=event.occurred_at, source="llm")
+                    for c in (analysis.get("causal_links") or [])
+                    if isinstance(c, dict) and c.get("target_ticker")
+                ]
+            except Exception as e:
+                llm_failures += 1
+                logger.warning("LLM analysis failed for event %s: %s — using causal graph only",
+                               event.id, e)
+
+            # Deterministic sector-graph links, merged with LLM links
+            auto_links = infer_causal_links(
+                event.headline, event.summary or "", tickers,
+                event_id=event.id, occurred_at=event.occurred_at,
             )
-
-            # Update event with causal analysis
-            event.classification = analysis.get("classification", "FACT")
-            event.entities = analysis.get("entities", [])
-            event.causal_links = analysis.get("causal_links", [])
-
-            # Merge with auto-generated causal links from sector graph
-            from app.core.engines.causal_graph import infer_causal_links
-            auto_links = infer_causal_links(event.headline, event.summary or "", tickers)
-            existing_targets = {c.get("target_ticker") for c in event.causal_links}
+            merged = list(llm_links)
+            seen = {c.get("target_ticker") for c in merged}
             for link in auto_links:
-                if link["target_ticker"] not in existing_targets:
-                    event.causal_links.append(link)
+                if link["target_ticker"] not in seen:
+                    merged.append(link)
+            event.causal_links = merged
 
-            # Check if any causal link affects watched tickers
-            affected = [c for c in analysis.get("causal_links", [])
-                       if c.get("target_ticker") in tickers]
-
+            # Relevance comes from the MERGED set (graph-only matches count too)
+            affected = [c for c in merged if c.get("target_ticker") in tickers]
             if affected:
-                event.entities = list(set(event.entities + [c.get("target_ticker") for c in affected]))
+                event.entities = sorted(set(
+                    list(llm_entities) + list(event.entities or []) +
+                    [c["target_ticker"] for c in affected]
+                ))
                 relevant_events.append((event, affected))
 
         logger.info(f"{len(relevant_events)} events affect watched universe")
@@ -133,11 +161,14 @@ class OpportunityEngine:
 
         # Generate proposal for each affected ticker
         proposals_created = 0
+        proposals_skipped = 0
         for ticker, data in ticker_events.items():
             try:
                 proposal = self._generate_proposal_for_ticker(ticker, data)
                 if proposal:
                     proposals_created += 1
+                else:
+                    proposals_skipped += 1
             except Exception as e:
                 logger.error(f"Error generating proposal for {ticker}: {e}")
 
@@ -149,19 +180,27 @@ class OpportunityEngine:
             "tickers_scanned": len(tickers),
             "events_analyzed": len(events),
             "relevant_events": len(relevant_events),
+            "llm_failures": llm_failures,
             "proposals_created": proposals_created,
+            "proposals_skipped": proposals_skipped,
         }
 
     def _generate_proposal_for_ticker(self, ticker: str, data: Dict) -> Optional[Proposal]:
-        """Generate or update proposal for a ticker based on new info"""
-        # Check if recent proposal exists (within 7 days)
-        recent = self.db.query(Proposal).filter(
+        """Generate or update proposal for a ticker based on new info.
+
+        Dedup rule: at most ONE ACTIVE proposal per ticker. A new group is only
+        created when no ACTIVE proposal exists (EXPIRED/REVISED/CLOSED allow a
+        fresh one). Revisions go through the portfolio engine / revise API.
+        """
+        active = self.db.query(Proposal).filter(
             Proposal.ticker == ticker,
-            Proposal.created_at >= datetime.now(timezone.utc) - timedelta(days=7)
+            Proposal.status == "ACTIVE",
         ).order_by(Proposal.version.desc()).first()
 
-        if recent and recent.status == "ACTIVE":
-            logger.info(f"{ticker}: Already has ACTIVE proposal v{recent.version}, skipping")
+        if active:
+            logger.info(
+                f"{ticker}: Already has ACTIVE proposal {active.id} (v{active.version}), skipping"
+            )
             return None
 
         # Get data needed for proposal
@@ -186,6 +225,15 @@ class OpportunityEngine:
             recent_events=data["events"],
             fundamentals=fundamentals,
         )
+
+        # Phase 3 gate: invalid model output must never enter the proposals table
+        from app.schemas.domain import validate_llm_proposal
+        try:
+            proposal_data = validate_llm_proposal(proposal_data)
+        except ValueError as e:
+            logger.error("Rejected LLM proposal for %s: %s | payload=%s",
+                         ticker, e, json.dumps(proposal_data, ensure_ascii=False, default=str)[:500])
+            return None
 
         # Create proposal
         import uuid

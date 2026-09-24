@@ -35,51 +35,62 @@ class EvaluationEngine:
         ).all()
 
         evaluated = 0
+        expired = 0
         for p in proposals:
             # Check if evaluation already exists
             existing = self.db.query(ProposalEvaluation).filter(
                 ProposalEvaluation.proposal_id == p.id
             ).first()
 
-            if existing:
-                continue
+            if not existing:
+                # Calculate realized metrics
+                start = p.valid_from.date() if p.valid_from else date.today()
+                window_days = p.horizon_days
 
-            # Calculate realized metrics
-            start = p.valid_from.date() if p.valid_from else date.today()
-            window_days = p.horizon_days
+                try:
+                    realized_return = self.get_market_return(p.ticker, start, window_days)
+                    benchmark_return = self.get_benchmark_return(start, window_days)
+                    from app.core.engines.market_data import get_max_drawdown
+                    max_dd = get_max_drawdown(p.ticker, start, window_days)
+                except Exception as e:
+                    # Provider failure must not abort the batch. Leave status
+                    # untouched so the next run retries this proposal.
+                    logger.error("Evaluation market-data failure for %s (%s): %s",
+                                 p.id, p.ticker, e)
+                    continue
 
-            # In production, fetch actual price data
-            realized_return = self.get_market_return(p.ticker, start, window_days)
-            benchmark_return = self.get_benchmark_return(start, window_days)
-            alpha = realized_return - benchmark_return
+                alpha = realized_return - benchmark_return
+                max_drawdown_pct = (max_dd * 100) if max_dd is not None else 0.0
 
-            # Max drawdown
-            from app.core.engines.market_data import get_max_drawdown
-            max_dd = get_max_drawdown(p.ticker, start, window_days)
-            max_drawdown_pct = (max_dd * 100) if max_dd is not None else 0.0
+                # Determine outcome
+                outcome = "SUCCESS" if realized_return > 0 else "FAILED"
 
-            # Determine outcome
-            outcome = "SUCCESS" if realized_return > 0 else "FAILED"
+                evaluation = ProposalEvaluation(
+                    proposal_id=p.id,
+                    ticker=p.ticker,
+                    evaluated_at=datetime.now(timezone.utc),
+                    evaluation_window_days=window_days,
+                    realized_return_pct=realized_return * 100,
+                    benchmark_return_pct=benchmark_return * 100,
+                    alpha_pct=alpha * 100,
+                    max_drawdown_pct=max_drawdown_pct,
+                    mfe_pct=0.0,
+                    mae_pct=0.0,
+                    outcome_status=outcome,
+                )
 
-            evaluation = ProposalEvaluation(
-                proposal_id=p.id,
-                ticker=p.ticker,
-                evaluated_at=datetime.now(timezone.utc),
-                evaluation_window_days=window_days,
-                realized_return_pct=realized_return * 100,
-                benchmark_return_pct=benchmark_return * 100,
-                alpha_pct=alpha * 100,
-                max_drawdown_pct=max_drawdown_pct,
-                mfe_pct=0.0,
-                mae_pct=0.0,
-                outcome_status=outcome,
-            )
+                self.db.add(evaluation)
+                evaluated += 1
 
-            self.db.add(evaluation)
-            evaluated += 1
+            # valid_until has passed → the proposal is no longer actionable.
+            # Flip even when an evaluation already exists (re-run must not leave
+            # expired rows marked ACTIVE).
+            if p.status == "ACTIVE":
+                p.status = "EXPIRED"
+                expired += 1
 
         self.db.commit()
-        return {"evaluated": evaluated}
+        return {"evaluated": evaluated, "expired": expired}
 
     def get_calibration_data(self) -> Dict[str, Any]:
         """Analyze confidence calibration across all evaluated proposals"""

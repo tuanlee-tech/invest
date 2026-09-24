@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
 from contextlib import asynccontextmanager
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -77,6 +77,90 @@ async def ui_partial(view: str, request: Request):
     return templates.TemplateResponse(f"{view}.html", {"request": request})
 
 
+# ============================================================
+# HEALTH (DB + market-data + LLM dependency status)
+# ============================================================
+
+def _probe_db() -> dict:
+    from sqlalchemy import inspect, text
+    from app.core.models.schema import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+    try:
+        if not inspect(engine).has_table("funds"):
+            return {
+                "status": "error",
+                "error": "schema missing (no 'funds' table) — run `alembic upgrade head` then `python -m app.storage.seed`",
+            }
+    except Exception as e:
+        return {"status": "error", "error": f"schema inspect failed: {type(e).__name__}: {e}"}
+    return {"status": "ok"}
+
+
+def _probe_market_data(timeout: float = 8.0) -> dict:
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    def probe():
+        from datetime import date, timedelta
+        from vnstock.api.quote import Quote
+        today = date.today()
+        df = Quote(symbol="VNINDEX", source="VCI").history(
+            start=(today - timedelta(days=7)).isoformat(),
+            end=today.isoformat(),
+        )
+        if df is None or df.empty:
+            raise RuntimeError("vnstock returned empty history for VNINDEX")
+
+    ex = ThreadPoolExecutor(max_workers=1)
+    try:
+        ex.submit(probe).result(timeout=timeout)
+        return {"status": "ok", "provider": "vnstock/VCI"}
+    except FuturesTimeout:
+        return {"status": "error", "error": f"vnstock probe timed out after {timeout}s"}
+    except Exception as e:
+        return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+
+
+def _probe_llm() -> dict:
+    import shutil
+    from app.config import settings
+    oc = shutil.which(settings.OPENCODE_BIN)
+    if oc:
+        return {
+            "status": "ok",
+            "provider": "opencode",
+            "binary": oc,
+            "default_model": settings.OPENCODE_DEFAULT_MODEL,
+        }
+    ol = shutil.which("ollama")
+    if ol:
+        return {"status": "ok", "provider": "ollama", "binary": ol}
+    return {
+        "status": "error",
+        "error": f"no LLM provider: '{settings.OPENCODE_BIN}' not in PATH and 'ollama' not found — LLM jobs will fail",
+    }
+
+
+@app.get("/health")
+def health():
+    checks = {
+        "database": _probe_db(),
+        "market_data": _probe_market_data(),
+        "llm": _probe_llm(),
+    }
+    failed = [name for name, res in checks.items() if res.get("status") != "ok"]
+    body = {"status": "ok" if not failed else "error", "dependencies": checks}
+    if failed:
+        body["error"] = "failed dependencies: " + ", ".join(failed)
+    return JSONResponse(status_code=200 if not failed else 503, content=body)
+
+
 # Test LLM endpoint
 @app.post("/api/test-llm")
 async def test_llm():
@@ -127,4 +211,4 @@ async def trigger_evaluation():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

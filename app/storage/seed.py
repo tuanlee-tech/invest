@@ -1,6 +1,58 @@
 """Seed initial sample data to get the system operational immediately"""
+import hashlib
+import json
 from datetime import datetime, timezone, date, timedelta
 from app.core.models.schema import get_db, Fund, FundHoldingSnapshot, Security, Proposal, Position, Event, SessionLocal
+
+SEED_SOURCE_URL = "seed:app/storage/seed.py"
+
+
+def holdings_hash(holdings_json) -> str:
+    """sha256 of canonical holdings_json representation"""
+    payload = json.dumps(holdings_json, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def seed_provenance(holdings_json, as_of_date, retrieved_at=None) -> dict:
+    """Truthful provenance for rows hardcoded in this file"""
+    return {
+        "source_url": SEED_SOURCE_URL,
+        "retrieved_at": retrieved_at or datetime.now(timezone.utc),
+        "source_hash": holdings_hash(holdings_json),
+        "reporting_period": as_of_date.strftime("%Y-%m"),
+        "effective_date": as_of_date,
+    }
+
+
+def backfill_snapshot_provenance(db) -> int:
+    """Fill NULL provenance fields on existing snapshots without touching holdings.
+
+    Only writes fields that are still NULL — never overwrites point-in-time data.
+    Returns number of rows updated.
+    """
+    updated = 0
+    rows = db.query(FundHoldingSnapshot).filter(
+        (FundHoldingSnapshot.source_url.is_(None))
+        | (FundHoldingSnapshot.source_hash.is_(None))
+        | (FundHoldingSnapshot.reporting_period.is_(None))
+        | (FundHoldingSnapshot.effective_date.is_(None))
+    ).all()
+    for row in rows:
+        if row.source_url is None:
+            row.source_url = SEED_SOURCE_URL
+        if row.source_hash is None:
+            row.source_hash = holdings_hash(row.holdings_json)
+        if row.retrieved_at is None:
+            row.retrieved_at = datetime.now(timezone.utc)
+        if row.reporting_period is None:
+            row.reporting_period = row.as_of_date.strftime("%Y-%m")
+        if row.effective_date is None:
+            row.effective_date = row.as_of_date
+        updated += 1
+    if updated:
+        db.commit()
+    return updated
+
 
 def seed():
     db = SessionLocal()
@@ -152,9 +204,16 @@ def seed():
                 FundHoldingSnapshot.fund_id == s.fund_id,
                 FundHoldingSnapshot.as_of_date == s.as_of_date
             ).first():
+                for k, v in seed_provenance(s.holdings_json, s.as_of_date, now).items():
+                    setattr(s, k, v)
                 db.add(s)
         db.commit()
         print("Fund Holding Snapshots seeded (3 months x 3 funds = 9 snapshots).")
+
+        # Backfill truthful provenance on any pre-existing rows (fills NULLs only)
+        backfilled = backfill_snapshot_provenance(db)
+        if backfilled:
+            print(f"Backfilled provenance on {backfilled} existing snapshot(s).")
 
         # Seed Securities
         all_tickers = ["HPG", "MWG", "CTG", "MBB", "VCB", "FPT", "TCB", "ACB", "VIC", "VHM", "BID", "VPB", "MSN", "CTR", "BVH", "GAS", "NVL"]
@@ -363,9 +422,9 @@ def seed():
         ]
         ssi_sca_snapshot = FundHoldingSnapshot(
             fund_id="SSI-SCA", as_of_date=date(2026, 9, 10),
-            source_url="https://www.ssiam.com.vn/fund/ssi-sca",
             holdings_json=ssi_sca_holdings,
-            raw_text="SSI-SCA Fund top 10 holdings as of Sep 2026 (sample data)"
+            raw_text="SSI-SCA Fund top 10 holdings as of Sep 2026 (sample data)",
+            **seed_provenance(ssi_sca_holdings, date(2026, 9, 10), now),
         )
         if not db.query(FundHoldingSnapshot).filter(
             FundHoldingSnapshot.fund_id == "SSI-SCA",
@@ -388,17 +447,18 @@ def seed():
         ]
         dcds_snapshot = FundHoldingSnapshot(
             fund_id="DCDS", as_of_date=date(2026, 9, 10),
-            source_url="https://www.dragoncapital.com/individual/funds/dcds/",
             holdings_json=dcds_holdings,
-            raw_text="DCDS Fund top 10 holdings as of Sep 2026 (sample data)"
+            raw_text="DCDS Fund top 10 holdings as of Sep 2026 (sample data)",
+            **seed_provenance(dcds_holdings, date(2026, 9, 10), now),
         )
         if not db.query(FundHoldingSnapshot).filter(
             FundHoldingSnapshot.fund_id == "DCDS",
             FundHoldingSnapshot.as_of_date == date(2026, 9, 10)
         ).first():
             db.add(dcds_snapshot)
+        db.commit()
 
-        print("PYN, SSI-SCA, DCDS Holdings seeded.")
+        print("SSI-SCA, DCDS Holdings seeded (sample data; PYN has no seeded snapshot — parser-driven only).")
 
         print("Database seeding completed successfully!")
     finally:
