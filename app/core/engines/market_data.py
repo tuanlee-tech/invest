@@ -120,3 +120,12 @@ def get_max_drawdown(ticker: str, start: date, days: int) -> Optional[float]:
     peak = prices.cummax()
     drawdown = (prices - peak) / peak
     return float(drawdown.min())
+
+
+def get_closes(ticker: str, start: date, days: int) -> Optional[list]:
+    """Close prices over [start, start+days] for hit/outcome checks. None if unavailable."""
+    end = start + timedelta(days=days)
+    df = _history(ticker, start, end)
+    if df is None or df.empty or "close" not in df.columns:
+        return None
+    return [float(c) for c in df["close"]]

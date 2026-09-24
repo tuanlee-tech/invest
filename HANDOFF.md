@@ -158,11 +158,16 @@ invest/
 | **`GET /health`** | ✅ DB + vnstock + LLM probes; 503 with per-dependency errors | Done |
 | **Docker** | ✅ Dockerfile + docker-compose.yml (runs as root, no healthcheck) | Partial |
 | **Legal** | ✅ DISCLAIMER.md + `/api/disclaimer` | Done |
-| **Tests** | ✅ 26 tests (lifecycle 7, ingestion 4, market-data/corp-actions 10, phase2 5) | Done |
+| **Tests** | ✅ 32 tests (lifecycle 7, ingestion 4, market-data/corp-actions 10, phase2 5, phase3 6) | Done |
 | **Causal graph** | ✅ Link contract: classification/mechanism/direction/confidence/source_event_id/timestamp; merged LLM + graph relevance | Done |
 | **Proposal dedup** | ✅ One ACTIVE proposal per ticker; `proposals_skipped` in scan result | Done |
 | **LLM output gate** | ✅ `validate_llm_proposal` rejects bad action/confidence/prices/size/missing invalidation before insert | Done |
+| **LLM failure handling** | ✅ Scan returns `LLM_FAILED` + `llm_failed[]`; events persist; zero fabricated proposals; latency/provider logged | Done |
 | **Invalidation (deterministic)** | ✅ Price-based conditions checked in code; CRITICAL → force `INVALIDATED`+`EXIT`; financial-series conditions still LLM-judged | Done (financial checks pending persisted series) |
+| **Decision history** | ✅ `position_decisions` append-only journal (every verdict incl. unchanged HOLD); migration `c3d4e5f6a7b8` | Done |
+| **Hit outcomes** | ✅ `entry_hit`/`target_hit`/`stop_hit` computed from window close path on new evaluations | Done (FPT/CTG rows predate — default False) |
+| **Track-record slicing** | ✅ `by_ticker` + `by_action` slices + `?ticker=&action=` filters; fund/model/prompt slices deferred (no `model_run_id`) | Done (partial) |
+| **Job history** | ✅ `job_runs` table + `GET /api/jobs` (uuid, start/end, status, error, record counts); `max_instances=1` | Done |
 | **Local LLM** | ⚠️ Ollama fallback routing implemented in `client.py`; Ollama not installed/tested | Low |
 | **Config/secrets** | No secret rotation | Low |
 
@@ -177,7 +182,8 @@ invest/
 5. ~~**PYN/SSI-SCA/DCDS snapshots + provenance + `GET /health` + auto-expire**~~ ✅ Done (see Phase 0/1 in roadmap)
 6. ~~**PYN/SSI-SCA/DCDS snapshots + provenance + `GET /health` + auto-expire**~~ ✅ Done (Phase 0/1)
 7. ~~**Phase 2 core** — causal-graph contract, proposal dedup, LLM output validation, deterministic price invalidation**~~ ✅ Done
-8. **Next (roadmap Phase 2/3 còn lại)** — material-change auto-versioning, decision history journal, `entry_hit`/`target_hit`/`stop_hit` + track-record slicing, scheduler job history, LLM latency logging, `LLM_FAILED` persistence
+8. ~~**Phase 2/3 remainder** — decision journal, hit outcomes, track-record slicing, LLM latency logging, LLM_FAILED status, job-run history**~~ ✅ Done
+9. **Next (roadmap Phase 4/5)** — material-change auto-versioning (Phase 2 leftover), Docker non-root, print→logging, CORS/auth, failure tests (vnstock timeout, malformed PDF, RSS/LLM/DB failures), raw model output audit column
 
 ---
 
@@ -199,12 +205,13 @@ invest/
 ## 7. Test Evidence
 
 ```bash
-# Run all tests (26 total)
+# Run all tests (32 total)
 cd invest
 .venv/bin/python -m tests.test_lifecycle         # 7 passed
 .venv/bin/python -m tests.test_ingestion         # 4 passed
 .venv/bin/python -m tests.test_market_data_unit  # 10 passed (no network)
 .venv/bin/python -m tests.test_phase2            # 5 passed (no network)
+.venv/bin/python -m tests.test_phase3            # 6 passed (no network)
 
 # Manual smoke test
 .venv/bin/alembic upgrade head

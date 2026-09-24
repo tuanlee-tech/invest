@@ -162,6 +162,7 @@ class OpportunityEngine:
         # Generate proposal for each affected ticker
         proposals_created = 0
         proposals_skipped = 0
+        llm_failed: List[Dict[str, str]] = []
         for ticker, data in ticker_events.items():
             try:
                 proposal = self._generate_proposal_for_ticker(ticker, data)
@@ -169,18 +170,28 @@ class OpportunityEngine:
                     proposals_created += 1
                 else:
                     proposals_skipped += 1
+            except (RuntimeError, ValueError) as e:
+                # All models failed / unparseable output — never invent a proposal.
+                # The source events stay persisted; this run reports LLM_FAILED.
+                llm_failed.append({"ticker": ticker, "error": str(e)[:300]})
+                logger.error("LLM_FAILED proposal generation for %s: %s", ticker, e)
             except Exception as e:
                 logger.error(f"Error generating proposal for {ticker}: {e}")
 
         # Commit event updates
         self.db.commit()
 
+        status = "completed"
+        if llm_failed and proposals_created == 0 and relevant_events:
+            status = "LLM_FAILED"
+
         return {
-            "status": "completed",
+            "status": status,
             "tickers_scanned": len(tickers),
             "events_analyzed": len(events),
             "relevant_events": len(relevant_events),
             "llm_failures": llm_failures,
+            "llm_failed": llm_failed,
             "proposals_created": proposals_created,
             "proposals_skipped": proposals_skipped,
         }

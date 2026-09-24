@@ -225,6 +225,46 @@ class ProposalEvaluation(Base):
     )
 
 
+class PositionDecision(Base):
+    """Append-only journal of every portfolio re-evaluation decision (incl. unchanged HOLDs)."""
+    __tablename__ = "position_decisions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    position_id = Column(String(50), nullable=False)
+    ticker = Column(String(20), nullable=False)
+    action = Column(String(20), nullable=False)          # ADD | HOLD | REDUCE | EXIT
+    thesis_health = Column(String(30), nullable=False)   # HEALTHY | AT_RISK | INVALIDATED
+    invalidation_triggered = Column(Boolean, default=False)
+    current_price = Column(Float, nullable=True)
+    triggered_conditions = Column(JSON, nullable=True)   # list of condition dicts
+    reason = Column(Text, nullable=True)
+    source = Column(String(20), default="reeval")        # reeval | manual
+    decided_at = Column(DateTime, default=datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("idx_decision_position", "position_id", "decided_at"),
+        Index("idx_decision_ticker", "ticker"),
+    )
+
+
+class JobRun(Base):
+    """Scheduler/job execution history: id, window, status, error, record counts."""
+    __tablename__ = "job_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(64), nullable=False)          # unique per run (uuid)
+    job_name = Column(String(100), nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default="RUNNING")       # RUNNING | SUCCESS | FAILED
+    error = Column(Text, nullable=True)
+    record_counts = Column(JSON, nullable=True)          # scalar summary of job result
+
+    __table_args__ = (
+        Index("idx_jobrun_name_time", "job_name", "started_at"),
+    )
+
+
 # Database setup
 engine = create_engine(settings.DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -10,6 +10,21 @@ from app.llm.client import OpenCodeClient
 logger = logging.getLogger(__name__)
 
 
+def compute_hit_levels(closes: Optional[List[float]],
+                       entry_max: Optional[float] = None,
+                       target_min: Optional[float] = None,
+                       stop_reference: Optional[float] = None) -> Dict[str, bool]:
+    """Point-in-time touch flags over the evaluation window (no lookahead beyond window)."""
+    if not closes:
+        return {"entry_hit": False, "target_hit": False, "stop_hit": False}
+    lo, hi = min(closes), max(closes)
+    return {
+        "entry_hit": bool(entry_max is not None and lo <= float(entry_max)),
+        "target_hit": bool(target_min is not None and hi >= float(target_min)),
+        "stop_hit": bool(stop_reference is not None and lo <= float(stop_reference)),
+    }
+
+
 class EvaluationEngine:
     """Evaluates historical proposals against realized outcomes for calibration"""
 
@@ -50,8 +65,9 @@ class EvaluationEngine:
                 try:
                     realized_return = self.get_market_return(p.ticker, start, window_days)
                     benchmark_return = self.get_benchmark_return(start, window_days)
-                    from app.core.engines.market_data import get_max_drawdown
+                    from app.core.engines.market_data import get_max_drawdown, get_closes
                     max_dd = get_max_drawdown(p.ticker, start, window_days)
+                    closes = get_closes(p.ticker, start, window_days)
                 except Exception as e:
                     # Provider failure must not abort the batch. Leave status
                     # untouched so the next run retries this proposal.
@@ -61,6 +77,12 @@ class EvaluationEngine:
 
                 alpha = realized_return - benchmark_return
                 max_drawdown_pct = (max_dd * 100) if max_dd is not None else 0.0
+                hits = compute_hit_levels(
+                    closes,
+                    entry_max=p.entry_max,
+                    target_min=p.target_min,
+                    stop_reference=p.stop_reference,
+                )
 
                 # Determine outcome
                 outcome = "SUCCESS" if realized_return > 0 else "FAILED"
@@ -70,6 +92,9 @@ class EvaluationEngine:
                     ticker=p.ticker,
                     evaluated_at=datetime.now(timezone.utc),
                     evaluation_window_days=window_days,
+                    entry_hit=hits["entry_hit"],
+                    target_hit=hits["target_hit"],
+                    stop_hit=hits["stop_hit"],
                     realized_return_pct=realized_return * 100,
                     benchmark_return_pct=benchmark_return * 100,
                     alpha_pct=alpha * 100,

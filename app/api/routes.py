@@ -390,43 +390,103 @@ def list_evaluations(
 
 
 @api.get("/track-record")
-def get_track_record(db: Session = Depends(get_db)):
+def get_track_record(
+    ticker: Optional[str] = None,
+    action: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Track record with optional ticker/action filter plus full slices.
+
+    Slices cover ticker + action (model/prompt slices need `model_run_id`,
+    which is not populated yet).
+    """
     evals = db.query(ProposalEvaluation).filter(
         ProposalEvaluation.outcome_status.in_(["SUCCESS", "FAILED"])
     ).all()
 
-    total = len(evals)
-    if total == 0:
-        return {"total": 0, "win_rate": 0, "avg_return": 0, "avg_alpha": 0}
+    proposals = {
+        p.id: p for p in db.query(Proposal).filter(
+            Proposal.id.in_([e.proposal_id for e in evals])
+        )
+    } if evals else {}
 
-    wins = sum(1 for e in evals if e.outcome_status == "SUCCESS")
-    avg_return = sum(e.realized_return_pct or 0 for e in evals) / total
-    avg_alpha = sum(e.alpha_pct or 0 for e in evals) / total
-
-    # Per-evaluation details
-    details = []
-    for e in evals:
-        proposal = db.query(Proposal).filter(Proposal.id == e.proposal_id).first()
-        details.append({
+    def _row(e: ProposalEvaluation):
+        p = proposals.get(e.proposal_id)
+        return {
             "proposal_id": e.proposal_id,
             "ticker": e.ticker,
-            "confidence": proposal.confidence if proposal else None,
-            "action": proposal.action if proposal else None,
-            "realized_return_pct": round(e.realized_return_pct, 2) if e.realized_return_pct else 0,
-            "benchmark_return_pct": round(e.benchmark_return_pct, 2) if e.benchmark_return_pct else 0,
-            "alpha_pct": round(e.alpha_pct, 2) if e.alpha_pct else 0,
-            "max_drawdown_pct": round(e.max_drawdown_pct, 2) if e.max_drawdown_pct else 0,
+            "confidence": p.confidence if p else None,
+            "action": p.action if p else None,
+            "realized_return_pct": round(e.realized_return_pct or 0, 2),
+            "benchmark_return_pct": round(e.benchmark_return_pct or 0, 2),
+            "alpha_pct": round(e.alpha_pct or 0, 2),
+            "max_drawdown_pct": round(e.max_drawdown_pct or 0, 2),
+            "entry_hit": e.entry_hit,
+            "target_hit": e.target_hit,
+            "stop_hit": e.stop_hit,
             "outcome_status": e.outcome_status,
             "evaluated_at": e.evaluated_at.isoformat() if e.evaluated_at else None,
-        })
+        }
+
+    def _agg(rows):
+        n = len(rows)
+        if not n:
+            return {"total": 0, "win_rate": 0, "avg_return_pct": 0, "avg_alpha_pct": 0}
+        wins = sum(1 for r in rows if r["outcome_status"] == "SUCCESS")
+        return {
+            "total": n,
+            "win_rate": round(wins / n * 100, 1),
+            "avg_return_pct": round(sum(r["realized_return_pct"] for r in rows) / n, 2),
+            "avg_alpha_pct": round(sum(r["alpha_pct"] for r in rows) / n, 2),
+            "target_hit_rate": round(sum(1 for r in rows if r["target_hit"]) / n * 100, 1),
+            "stop_hit_rate": round(sum(1 for r in rows if r["stop_hit"]) / n * 100, 1),
+        }
+
+    all_rows = [_row(e) for e in evals]
+
+    # Slices computed over the full set, independent of the filter
+    by_ticker, by_action = {}, {}
+    for r in all_rows:
+        by_ticker.setdefault(r["ticker"], []).append(r)
+        key = r["action"] or "UNKNOWN"
+        by_action.setdefault(key, []).append(r)
+
+    filtered = all_rows
+    if ticker:
+        filtered = [r for r in filtered if r["ticker"] == ticker.upper()]
+    if action:
+        filtered = [r for r in filtered if (r["action"] or "").upper() == action.upper()]
+
+    summary = _agg(filtered)
+    if summary["total"] == 0 and not all_rows:
+        return {"total": 0, "win_rate": 0, "avg_return_pct": 0, "avg_alpha_pct": 0}
 
     return {
-        "total_evaluated": total,
-        "win_rate": round(wins / total * 100, 1),
-        "avg_return_pct": round(avg_return, 2),
-        "avg_alpha_pct": round(avg_alpha, 2),
-        "details": details,
+        **summary,
+        "filters": {"ticker": ticker, "action": action},
+        "slices": {
+            "by_ticker": {k: _agg(v) for k, v in sorted(by_ticker.items())},
+            "by_action": {k: _agg(v) for k, v in sorted(by_action.items())},
+        },
+        "details": filtered,
     }
+
+
+@api.get("/jobs")
+def list_job_runs(
+    job_name: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Job execution history (id, window, status, error, record counts)."""
+    from app.core.models.schema import JobRun
+    q = db.query(JobRun)
+    if job_name:
+        q = q.filter(JobRun.job_name == job_name)
+    if status:
+        q = q.filter(JobRun.status == status)
+    return q.order_by(JobRun.started_at.desc()).limit(min(limit, 200)).all()
 
 
 @api.get("/disclaimer")

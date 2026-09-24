@@ -3,6 +3,7 @@ import logging
 import re
 import shutil
 import subprocess
+import time
 from typing import Any, Dict, List, Optional
 from app.config import settings
 
@@ -39,6 +40,7 @@ class OpenCodeClient:
 
         last_error = None
         for m in models_to_try:
+            started = time.monotonic()
             try:
                 cmd = [
                     self.bin,
@@ -59,10 +61,15 @@ class OpenCodeClient:
                     timeout=timeout,
                     encoding="utf-8",
                 )
+                latency_ms = int((time.monotonic() - started) * 1000)
 
                 if res.returncode != 0:
                     last_error = (
                         f"Exit code {res.returncode}: {res.stderr.strip()}"
+                    )
+                    logger.warning(
+                        "llm provider=opencode model=%s latency_ms=%d status=error reason=%s",
+                        m, latency_ms, last_error[:300],
                     )
                     continue
 
@@ -82,13 +89,23 @@ class OpenCodeClient:
 
                 full_text = "".join(output_texts).strip()
                 if full_text:
+                    logger.info(
+                        "llm provider=opencode model=%s latency_ms=%d status=ok chars=%d",
+                        m, latency_ms, len(full_text),
+                    )
                     return full_text
                 else:
                     last_error = "Empty text output from model stream"
+                    logger.warning(
+                        "llm provider=opencode model=%s latency_ms=%d status=error reason=%s",
+                        m, latency_ms, last_error,
+                    )
             except Exception as e:
+                latency_ms = int((time.monotonic() - started) * 1000)
                 last_error = str(e)
                 logger.warning(
-                    f"Model {m} failed: {e}. Trying fallback if available."
+                    "llm provider=opencode model=%s latency_ms=%d status=error reason=%s",
+                    m, latency_ms, last_error[:300],
                 )
 
         # Try Ollama fallback if available

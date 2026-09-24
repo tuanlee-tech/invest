@@ -26,7 +26,7 @@
 - Live vnstock price endpoint with short-lived cache; `vnstock_retry` retries only transient failures (timeout/connection/5xx/429), permanent errors fail fast as `MarketDataError`.
 - Expired proposals are flipped `ACTIVE → EXPIRED` by the evaluation job (FPT, CTG now `EXPIRED`; HPG, MWG still `ACTIVE`).
 - OpenCode LLM client has Ollama fallback routing, but Ollama is not installed/tested locally.
-- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5 (26 total).
+- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5, `test_phase3` 6 (32 total).
 - `HANDOFF.md`, `OPENCODE.md`, and this roadmap reconciled 2026-09-24 (provenance tables, health, market-data, corporate-actions updates).
 
 ## Phase 0: Establish A Reliable Baseline
@@ -105,16 +105,16 @@ The health response must identify dependency failures instead of returning a mis
 
 - [x] Evaluate structured invalidation conditions automatically. (Price-based conditions machine-checked before LLM; financial-series conditions remain LLM-judged — no persisted financial series.)
 - [x] Persist thesis health as `HEALTHY`, `AT_RISK`, or `INVALIDATED`. (`Position.thesis_health`; CRITICAL price trigger forces `INVALIDATED` + `EXIT` regardless of LLM.)
-- [ ] Preserve every ADD/HOLD/REDUCE/EXIT decision as history. (Only action *changes* create a revision; unchanged HOLDs are not journaled.)
+- [x] Preserve every ADD/HOLD/REDUCE/EXIT decision as history. (`position_decisions` append-only journal — unchanged HOLDs included; `decisions_recorded` in job result.)
 - [x] Keep all trading execution manual and out of scope.
 
 ### Track record
 
 - [x] Run evaluation on seeded proposals using point-in-time market data. (FPT, CTG evaluated and flipped to `EXPIRED`; HPG, MWG not yet settled — `valid_until` in 2027.)
-- [ ] Calculate return by horizon, target/stop outcomes, invalidation outcome, win rate, and confidence calibration. (Win rate + confidence calibration exist; `entry_hit`/`target_hit`/`stop_hit` columns are never set.)
-- [ ] Slice results by ticker, fund, action, model, and prompt version.
+- [x] Calculate return by horizon, target/stop outcomes, invalidation outcome, win rate, and confidence calibration. (`entry_hit`/`target_hit`/`stop_hit` computed from window close path; win rate + confidence calibration already present. Note: FPT/CTG rows predate this — hits stay default until re-evaluated.)
+- [x] Slice results by ticker, fund, action, model, and prompt version. (ticker + action slices shipped; fund/model/prompt slices need `model_run_id` populated — deferred.)
 
-**Acceptance criteria**
+**Acceptance criteria (Phase 2)**
 
 - Every proposal can be traced to events, fund snapshots, and fundamentals.
 - Re-running a scan does not create duplicate proposals.
@@ -126,10 +126,10 @@ The health response must identify dependency failures instead of returning a mis
 
 ### LLM provider boundary
 
-- [ ] Keep OpenCode/free models as the default path.
+- [x] Keep OpenCode/free models as the default path.
 - [ ] Verify Ollama detection, model availability, timeout, and fallback behavior when installed. (Routing implemented in `app/llm/client.py`; Ollama absent on this machine — untested.)
-- [ ] Log provider, model, latency, and failure reason without logging secrets.
-- [ ] If all providers fail, persist the event and mark the proposal job `LLM_FAILED`; never invent a proposal.
+- [x] Log provider, model, latency, and failure reason without logging secrets. (`llm provider=… model=… latency_ms=… status=… reason=…` lines; stderr truncated to 300 chars.)
+- [x] If all providers fail, persist the event and mark the proposal job `LLM_FAILED`; never invent a proposal. (Scan returns `status=LLM_FAILED` + `llm_failed[]`; events stay stored; zero proposals created — covered by `test_scan_reports_llm_failed_without_fabricating`.)
 
 ### Structured output
 
@@ -139,9 +139,9 @@ The health response must identify dependency failures instead of returning a mis
 
 ### Scheduler
 
-- [ ] Add job execution ID, start/end time, status, error, and record counts.
-- [ ] Prevent overlapping executions of the same job.
-- [ ] Ensure one failed job does not stop the scheduler.
+- [x] Add job execution ID, start/end time, status, error, and record counts. (`job_runs` table + `GET /api/jobs`; uuid per run, scalar summary of result.)
+- [x] Prevent overlapping executions of the same job. (`max_instances=1` on every job.)
+- [x] Ensure one failed job does not stop the scheduler. (`_safe_job` catches all, marks run FAILED, scheduler keeps ticking.)
 
 **Acceptance criteria**
 

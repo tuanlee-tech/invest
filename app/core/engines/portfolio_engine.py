@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 import logging
 
 from app.config import settings
-from app.core.models.schema import get_db, Position, Proposal, Event, SessionLocal
+from app.core.models.schema import get_db, Position, Proposal, Event, PositionDecision, SessionLocal
 from app.llm.client import OpenCodeClient
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,7 @@ class PortfolioEngine:
         results = {
             "positions_checked": len(positions),
             "revisions_created": 0,
+            "decisions_recorded": 0,
             "actions": {},
             "invalidation_alerts": [],
             "errors": 0,
@@ -163,6 +164,27 @@ class PortfolioEngine:
             # Update position state
             pos.current_action = new_action
             pos.thesis_health = thesis_health
+
+            # Append-only decision history (every verdict, incl. unchanged HOLD)
+            reasons = []
+            if triggered:
+                reasons.append("deterministic price invalidation: " + ", ".join(
+                    str(c.get("condition_id") or c.get("description")) for c in triggered
+                ))
+            if evaluation.get("explanation"):
+                reasons.append(str(evaluation["explanation"]))
+            self.db.add(PositionDecision(
+                position_id=pos.id,
+                ticker=ticker,
+                action=new_action,
+                thesis_health=thesis_health,
+                invalidation_triggered=invalidation_triggered,
+                current_price=current_price or None,
+                triggered_conditions=triggered or None,
+                reason=" | ".join(reasons) or None,
+                source="reeval",
+            ))
+            results["decisions_recorded"] += 1
 
             if invalidation_triggered and not any(
                 a.get("ticker") == ticker for a in results["invalidation_alerts"]
