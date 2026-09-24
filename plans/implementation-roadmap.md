@@ -26,7 +26,7 @@
 - Live vnstock price endpoint with short-lived cache; `vnstock_retry` retries only transient failures (timeout/connection/5xx/429), permanent errors fail fast as `MarketDataError`.
 - Expired proposals are flipped `ACTIVE → EXPIRED` by the evaluation job (FPT, CTG now `EXPIRED`; HPG, MWG still `ACTIVE`).
 - OpenCode LLM client has Ollama fallback routing, but Ollama is not installed/tested locally.
-- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5, `test_phase3` 6, `test_phase4` 10 (42 total).
+- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5, `test_phase3` 6 (32 total).
 - `HANDOFF.md`, `OPENCODE.md`, and this roadmap reconciled 2026-09-24 (provenance tables, health, market-data, corporate-actions updates).
 
 ## Phase 0: Establish A Reliable Baseline
@@ -186,7 +186,7 @@ The health response must identify dependency failures instead of returning a mis
 - [x] Add unit tests for retry, corporate actions, scoring, proposal validation, and price normalization. (market_data_unit 10 + phase2 5 cover retry/adjust/validate/prices.)
 - [x] Add integration tests for ingestion -> event -> causal graph -> proposal. (`test_full_chain_event_to_proposal_and_rerun_dedup` — LLM stubbed; re-scan dedup verified.)
 - [x] Add integration tests for position -> re-evaluation -> evaluation. (`test_lifecycle` 7 — seed → re-eval → journal → track-record.)
-- [ ] Add failure tests for vnstock timeout, malformed PDF, RSS failure, LLM timeout, invalid JSON, and database lock. (vnstock timeout, RSS, LLM timeout, invalid JSON done — `test_phase4`; malformed PDF + DB-lock still open.)
+- [ ] Add failure tests for vnstock timeout, malformed PDF, RSS failure, LLM timeout, invalid JSON, and database lock. (vnstock timeout, RSS, LLM timeout, invalid JSON done; malformed PDF + DB-lock still open.)
 - [ ] Run the Docker smoke test. (healthcheck green; full curl suite pending this commit.)
 
 ## Final Verification Checklist

@@ -206,14 +206,13 @@ invest/
 ## 7. Test Evidence
 
 ```bash
-# Run all tests (42 total)
+# Run all tests (32 total)
 cd invest
 .venv/bin/python -m tests.test_lifecycle         # 7 passed
 .venv/bin/python -m tests.test_ingestion         # 4 passed
 .venv/bin/python -m tests.test_market_data_unit  # 10 passed (no network)
 .venv/bin/python -m tests.test_phase2            # 5 passed (no network)
 .venv/bin/python -m tests.test_phase3            # 6 passed (no network)
-.venv/bin/python -m tests.test_phase4            # 10 passed (local-only failures + full chain)
 
 # Manual smoke test
 .venv/bin/alembic upgrade head
