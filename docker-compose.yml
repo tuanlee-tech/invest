@@ -5,9 +5,10 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      # Host OpenCode CLI + config so free-model LLM jobs work inside the container
+      # Host OpenCode CLI + config so free-model LLM jobs work inside the container.
+      # Config path matches the container user's HOME (/home/appuser).
       - /home/vcc/.opencode/bin/opencode:/usr/local/bin/opencode:ro
-      - /home/vcc/.config/opencode:/root/.config/opencode:ro
+      - /home/vcc/.config/opencode:/home/appuser/.config/opencode:ro
     environment:
       OPENCODE_BIN: /usr/local/bin/opencode
     env_file:

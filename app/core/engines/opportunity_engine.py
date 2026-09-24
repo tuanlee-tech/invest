@@ -2,6 +2,7 @@ from datetime import datetime, timezone, date, timedelta
 from typing import List, Dict, Any, Optional
 import json
 import logging
+import uuid
 
 from app.config import settings
 from app.core.models.schema import get_db, FundHoldingSnapshot, Security, Event, Proposal, SessionLocal
@@ -197,22 +198,29 @@ class OpportunityEngine:
         }
 
     def _generate_proposal_for_ticker(self, ticker: str, data: Dict) -> Optional[Proposal]:
-        """Generate or update proposal for a ticker based on new info.
+        """Generate or revise a proposal for a ticker.
 
-        Dedup rule: at most ONE ACTIVE proposal per ticker. A new group is only
-        created when no ACTIVE proposal exists (EXPIRED/REVISED/CLOSED allow a
-        fresh one). Revisions go through the portfolio engine / revise API.
+        Material-change rule: a new version is created only when an event
+        arrives whose id is NOT already in the ACTIVE proposal's evidence_refs.
+        Same evidence re-scanned → skip (no duplicate, no new version).
         """
         active = self.db.query(Proposal).filter(
             Proposal.ticker == ticker,
             Proposal.status == "ACTIVE",
         ).order_by(Proposal.version.desc()).first()
 
+        new_evidence: List[str] = []
         if active:
+            known = set(active.evidence_refs or [])
+            new_evidence = [e.id for e in data["events"] if e.id not in known]
+            if not new_evidence:
+                logger.info(
+                    f"{ticker}: ACTIVE proposal {active.id} already covers all evidence, skipping"
+                )
+                return None
             logger.info(
-                f"{ticker}: Already has ACTIVE proposal {active.id} (v{active.version}), skipping"
+                f"{ticker}: material change — {len(new_evidence)} new event(s), bumping version"
             )
-            return None
 
         # Get data needed for proposal
         fund_holdings = self.get_fund_holdings_for_ticker(ticker)
@@ -246,16 +254,37 @@ class OpportunityEngine:
                          ticker, e, json.dumps(proposal_data, ensure_ascii=False, default=str)[:500])
             return None
 
-        # Create proposal
-        import uuid
-        group_id = f"{ticker}-{datetime.now().strftime('%Y')}-{str(uuid.uuid4())[:8]}"
-        proposal_id = f"{group_id}-v1"
+        now = datetime.now(timezone.utc)
+        if active:
+            # Material change → new version inside the same group; old becomes REVISED
+            new_version = active.version + 1
+            group_id = active.proposal_group_id
+            parent_version = active.version
+            known = list(active.evidence_refs or [])
+            seen = set(known)
+            evidence_refs = list(known)
+            for eid in [e.id for e in data["events"]]:
+                if eid not in seen:
+                    evidence_refs.append(eid)
+                    seen.add(eid)
+            changed_from = (
+                f"Material change: {len(new_evidence)} new event(s) "
+                f"({', '.join(new_evidence[:5])})"
+            )
+            active.status = "REVISED"
+        else:
+            new_version = 1
+            group_id = f"{ticker}-{now.strftime('%Y')}-{str(uuid.uuid4())[:8]}"
+            parent_version = None
+            evidence_refs = [e.id for e in data["events"]]
+            changed_from = "Initial proposal from opportunity scan"
 
         proposal = Proposal(
-            id=proposal_id,
+            id=f"{group_id}-v{new_version}",
             proposal_group_id=group_id,
             ticker=ticker,
-            version=1,
+            version=new_version,
+            parent_version=parent_version,
             status="ACTIVE",
             action=proposal_data.get("action", "WATCH"),
             entry_min=proposal_data.get("entry_min"),
@@ -265,17 +294,17 @@ class OpportunityEngine:
             stop_reference=proposal_data.get("stop_reference"),
             stop_method=proposal_data.get("stop_method", "structural_support"),
             horizon_days=proposal_data.get("horizon_days", 365),
-            valid_from=datetime.now(timezone.utc),
-            valid_until=datetime.now(timezone.utc) + timedelta(days=proposal_data.get("horizon_days", 365)),
+            valid_from=now,
+            valid_until=now + timedelta(days=proposal_data.get("horizon_days", 365)),
             confidence=proposal_data.get("confidence", 50),
             position_size_suggestion=proposal_data.get("position_size_suggestion", 3.0),
             thesis=proposal_data.get("thesis", ""),
             catalysts=proposal_data.get("catalysts", []),
             risks=proposal_data.get("risks", []),
             invalidation_conditions=proposal_data.get("invalidation_conditions", []),
-            evidence_refs=[e.id for e in data["events"]],
+            evidence_refs=evidence_refs,
             reasoning_summary=proposal_data.get("reasoning_summary", ""),
-            changed_from_previous="Initial proposal from opportunity scan",
+            changed_from_previous=changed_from,
         )
 
         self.db.add(proposal)

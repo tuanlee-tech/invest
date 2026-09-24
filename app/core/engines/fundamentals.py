@@ -1,6 +1,9 @@
 """VNStock fundamentals normalization — dedup quarters, standardize units."""
+import logging
 from typing import Dict, Any, Optional
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 
 def get_fundamentals(ticker: str) -> Dict[str, Any]:
@@ -33,7 +36,7 @@ def get_fundamentals(ticker: str) -> Dict[str, Any]:
                             result["income"][key] = val
                     result["income"]["quarter"] = latest_col
         except Exception as e:
-            print(f"[fundamentals] Income error for {ticker}: {e}")
+            logger.error("fundamentals income error for %s: %s", ticker, e)
 
         # Ratios — only extract the latest value per metric
         try:
@@ -53,11 +56,11 @@ def get_fundamentals(ticker: str) -> Dict[str, Any]:
                             except (ValueError, TypeError):
                                 pass
         except Exception as e:
-            print(f"[fundamentals] Ratio error for {ticker}: {e}")
+            logger.error("fundamentals ratio error for %s: %s", ticker, e)
 
         return result
     except Exception as e:
-        print(f"[fundamentals] Error fetching {ticker}: {e}")
+        logger.error("fundamentals fetch error for %s: %s", ticker, e)
         return {"ticker": ticker, "income": {}, "ratios": {}}
 
 

@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     INGESTION_INTERVAL_MINUTES: int = 60
     REEVALUATION_INTERVAL_MINUTES: int = 120
 
+    # Security (optional): when set, all routes except /health and /static
+    # require `Authorization: Bearer <token>` (or ?token=). Unset = open local use.
+    AUTH_TOKEN: Optional[str] = None
+
+    # Request guard
+    MAX_BODY_BYTES: int = 1_000_000  # reject bodies larger than this with 413
+
     # Fund sources
     FUND_SOURCES: dict = {
         "VEIL": {

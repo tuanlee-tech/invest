@@ -127,7 +127,7 @@ invest/
 │   ├── storage/seed.py         # Sample data loader
 │   ├── templates/              # Jinja2 (sync rendering)
 │   └── schemas/domain.py       # Pydantic request models
-├── tests/test_lifecycle.py     # Integration tests (5 tests, all pass)
+├── tests/test_lifecycle.py     # Integration tests (7 tests, all pass)
 ├── data/invest.db              # SQLite (auto-created)
 ├── research/                   # Feasibility reports
 ├── plans/architecture-proposal.md
@@ -156,9 +156,9 @@ invest/
 | **Market data** | ✅ 60s/300s TTL cache; transient-only retry; `MarketDataError` → HTTP 502 | Done |
 | **Corporate actions** | ✅ Documented manual format; split/rights/bonus `ratio` + dividend `amount`; windowed adjustments; unit tests | Done (source still MANUAL/unverified) |
 | **`GET /health`** | ✅ DB + vnstock + LLM probes; 503 with per-dependency errors | Done |
-| **Docker** | ✅ Dockerfile + docker-compose.yml (runs as root, no healthcheck) | Partial |
+| **Docker** | ✅ Dockerfile non-root (uid 1000 `appuser`) + Compose healthcheck + volume mounts + opencode config mount | Done |
 | **Legal** | ✅ DISCLAIMER.md + `/api/disclaimer` | Done |
-| **Tests** | ✅ 32 tests (lifecycle 7, ingestion 4, market-data/corp-actions 10, phase2 5, phase3 6) | Done |
+| **Tests** | ✅ 42 tests (lifecycle 7, ingestion 4, market-data/corp-actions 10, phase2 5, phase3 6, phase4 10) | Done |
 | **Causal graph** | ✅ Link contract: classification/mechanism/direction/confidence/source_event_id/timestamp; merged LLM + graph relevance | Done |
 | **Proposal dedup** | ✅ One ACTIVE proposal per ticker; `proposals_skipped` in scan result | Done |
 | **LLM output gate** | ✅ `validate_llm_proposal` rejects bad action/confidence/prices/size/missing invalidation before insert | Done |
@@ -183,7 +183,8 @@ invest/
 6. ~~**PYN/SSI-SCA/DCDS snapshots + provenance + `GET /health` + auto-expire**~~ ✅ Done (Phase 0/1)
 7. ~~**Phase 2 core** — causal-graph contract, proposal dedup, LLM output validation, deterministic price invalidation**~~ ✅ Done
 8. ~~**Phase 2/3 remainder** — decision journal, hit outcomes, track-record slicing, LLM latency logging, LLM_FAILED status, job-run history**~~ ✅ Done
-9. **Next (roadmap Phase 4/5)** — material-change auto-versioning (Phase 2 leftover), Docker non-root, print→logging, CORS/auth, failure tests (vnstock timeout, malformed PDF, RSS/LLM/DB failures), raw model output audit column
+9. ~~**Phase 4/5 core** — material-change auto-versioning, Docker non-root, print→logging, CORS/auth/body-limit, backup/restore, migration-from-empty + failure tests (vnstock/RSS/LLM)~~ ✅ Done (commit this)
+10. **Remaining (low)** — malformed-PDF + DB-lock failure tests, raw model output audit column, Ollama install/verify, fund/model track-record slices (needs `model_run_id`)
 
 ---
 
@@ -205,13 +206,14 @@ invest/
 ## 7. Test Evidence
 
 ```bash
-# Run all tests (32 total)
+# Run all tests (42 total)
 cd invest
 .venv/bin/python -m tests.test_lifecycle         # 7 passed
 .venv/bin/python -m tests.test_ingestion         # 4 passed
 .venv/bin/python -m tests.test_market_data_unit  # 10 passed (no network)
 .venv/bin/python -m tests.test_phase2            # 5 passed (no network)
 .venv/bin/python -m tests.test_phase3            # 6 passed (no network)
+.venv/bin/python -m tests.test_phase4            # 10 passed (local-only failures + full chain)
 
 # Manual smoke test
 .venv/bin/alembic upgrade head

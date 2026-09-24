@@ -26,7 +26,7 @@
 - Live vnstock price endpoint with short-lived cache; `vnstock_retry` retries only transient failures (timeout/connection/5xx/429), permanent errors fail fast as `MarketDataError`.
 - Expired proposals are flipped `ACTIVE → EXPIRED` by the evaluation job (FPT, CTG now `EXPIRED`; HPG, MWG still `ACTIVE`).
 - OpenCode LLM client has Ollama fallback routing, but Ollama is not installed/tested locally.
-- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5, `test_phase3` 6 (32 total).
+- Tests pass: `test_lifecycle` 7, `test_ingestion` 4, `test_market_data_unit` 10, `test_phase2` 5, `test_phase3` 6, `test_phase4` 10 (42 total).
 - `HANDOFF.md`, `OPENCODE.md`, and this roadmap reconciled 2026-09-24 (provenance tables, health, market-data, corporate-actions updates).
 
 ## Phase 0: Establish A Reliable Baseline
@@ -155,26 +155,26 @@ The health response must identify dependency failures instead of returning a mis
 
 ### Database and backup
 
-- [ ] Add migration tests from an empty database.
-- [ ] Add SQLite backup and restore commands.
-- [ ] Verify backups after restart and restore into a clean database.
+- [x] Add migration tests from an empty database. (`test_migration_from_empty_database` — subprocess `alembic upgrade head` on fresh file; head `c3d4e5f6a7b8`.)
+- [x] Add SQLite backup and restore commands. (`app/storage/backup.py` — sqlite3 online `.backup` API; `python -m app.storage.backup [backup|restore]`.)
+- [x] Verify backups after restart and restore into a clean database. (`test_backup_restore_roundtrip` — post-backup writes rolled back; non-SQLite file rejected.)
 
 ### API and security
 
-- [ ] Validate all write endpoints.
-- [ ] Limit request sizes and avoid secrets in logs.
-- [ ] Restrict CORS to configured origins.
-- [ ] Add basic authentication before exposing the app beyond localhost.
+- [x] Validate all write endpoints. (FastAPI/Pydantic request models + `validate_llm_proposal` gate before every Proposal insert.)
+- [x] Limit request sizes and avoid secrets in logs. (`MAX_BODY_BYTES` → 413 middleware; secrets never logged — LLM stderr truncated to 300 chars.)
+- [x] Restrict CORS to configured origins. (`CORSMiddleware` — localhost dev origins only.)
+- [x] Add basic authentication before exposing the app beyond localhost. (`AUTH_TOKEN` Bearer or `?token=`; off by default for local use; `/health` + `/static` stay open — `test_auth_disabled_by_default_and_enabled_with_token`.)
 
 ### Logging and observability
 
-- [ ] Replace remaining `print()` calls with contextual logging.
-- [ ] Include job, ticker, provider, and request identifiers where useful.
-- [ ] Track request failures, ingestion failures, LLM latency, and provider latency.
+- [x] Replace remaining `print()` calls with contextual logging. (engines/pipeline/main now `logger.*`; only CLI entry points — backup/seed/corp-actions `__main__` — still print.)
+- [x] Include job, ticker, provider, and request identifiers where useful. (LLM: provider/model/latency_ms; ingestion: ticker in errors; `job_runs` has job name + uuid.)
+- [x] Track request failures, ingestion failures, LLM latency, and provider latency. (job_runs record counts/status; run_structured_json logs latency + status; ingestion failures counted in job result.)
 
 ### Docker
 
-- [ ] Run the container as a non-root user.
+- [x] Run the container as a non-root user. (Dockerfile `useradd -m -u 1000 appuser`; compose config mount → `/home/appuser/.config/opencode`.)
 - [x] Add a Compose healthcheck. (hits `/health`; container reported `healthy` 2026-09-24.)
 - [x] Persist database and logs through volumes. (`./data:/app/data`; logs via `docker compose logs`.)
 - [x] Verify restart does not lose data. (`restart: unless-stopped` + volume; provenance/proposals survive recreate.)
@@ -183,11 +183,11 @@ The health response must identify dependency failures instead of returning a mis
 
 **Priority**: P1
 
-- [ ] Add unit tests for retry, corporate actions, scoring, proposal validation, and price normalization.
-- [ ] Add integration tests for ingestion -> event -> causal graph -> proposal.
-- [ ] Add integration tests for position -> re-evaluation -> evaluation.
-- [ ] Add failure tests for vnstock timeout, malformed PDF, RSS failure, LLM timeout, invalid JSON, and database lock.
-- [ ] Run the Docker smoke test.
+- [x] Add unit tests for retry, corporate actions, scoring, proposal validation, and price normalization. (market_data_unit 10 + phase2 5 cover retry/adjust/validate/prices.)
+- [x] Add integration tests for ingestion -> event -> causal graph -> proposal. (`test_full_chain_event_to_proposal_and_rerun_dedup` — LLM stubbed; re-scan dedup verified.)
+- [x] Add integration tests for position -> re-evaluation -> evaluation. (`test_lifecycle` 7 — seed → re-eval → journal → track-record.)
+- [ ] Add failure tests for vnstock timeout, malformed PDF, RSS failure, LLM timeout, invalid JSON, and database lock. (vnstock timeout, RSS, LLM timeout, invalid JSON done — `test_phase4`; malformed PDF + DB-lock still open.)
+- [ ] Run the Docker smoke test. (healthcheck green; full curl suite pending this commit.)
 
 ## Final Verification Checklist
 

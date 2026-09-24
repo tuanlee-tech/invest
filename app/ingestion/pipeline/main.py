@@ -299,18 +299,21 @@ class NewsEventIngester:
         })
 
     def fetch_rss(self, url: str, source_name: str) -> List[Dict[str, Any]]:
-        """Parse RSS feed and return list of event dicts"""
-        try:
-            feed = feedparser.parse(url)
-            events = []
-            for entry in feed.entries[:20]:  # Limit to 20 latest
-                event = self._parse_entry(entry, source_name)
-                if event:
-                    events.append(event)
-            return events
-        except Exception as e:
-            print(f"Error fetching RSS {url}: {e}")
-            return []
+        """Parse RSS feed and return list of event dicts.
+
+        Raises on unrecoverable parse/fetch failure so the caller can record
+        an ingestion error instead of silently returning nothing.
+        """
+        feed = feedparser.parse(url)
+        if getattr(feed, "bozo", False) and not feed.entries:
+            reason = getattr(feed, "bozo_exception", None) or "unknown parse error"
+            raise RuntimeError(f"RSS parse failed for {source_name} ({url}): {reason}")
+        events = []
+        for entry in feed.entries[:20]:  # Limit to 20 latest
+            event = self._parse_entry(entry, source_name)
+            if event:
+                events.append(event)
+        return events
 
     def _parse_entry(self, entry, source_name: str) -> Optional[Dict[str, Any]]:
         # Generate deterministic ID from URL
@@ -362,7 +365,7 @@ class MarketDataIngester:
             )
             return df.to_dict('records') if not df.empty else []
         except Exception as e:
-            print(f"Error fetching OHLCV for {ticker}: {e}")
+            logger.error("Error fetching OHLCV for %s: %s", ticker, e)
             return []
 
     def fetch_fundamentals(self, ticker: str) -> Dict:
@@ -377,7 +380,7 @@ class MarketDataIngester:
                 "ratios": ratios.to_dict('records') if not ratios.empty else [],
             }
         except Exception as e:
-            print(f"Error fetching fundamentals for {ticker}: {e}")
+            logger.error("Error fetching fundamentals for %s: %s", ticker, e)
             return {"income_statement": [], "ratios": []}
 
 

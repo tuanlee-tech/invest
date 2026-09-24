@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 from contextlib import asynccontextmanager
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -12,6 +14,44 @@ from app.scheduler import scheduler
 from app.core.logging_config import setup_logging, get_logger
 
 logger = get_logger(__name__)
+
+
+class BodySizeLimitMiddleware(BaseHTTPMiddleware):
+    """Reject request bodies larger than settings.MAX_BODY_BYTES (413)."""
+
+    async def dispatch(self, request: Request, call_next):
+        raw_len = request.headers.get("content-length")
+        if raw_len and raw_len.isdigit() and int(raw_len) > settings.MAX_BODY_BYTES:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"payload too large (max {settings.MAX_BODY_BYTES} bytes)"},
+            )
+        return await call_next(request)
+
+
+class OptionalAuthMiddleware(BaseHTTPMiddleware):
+    """Bearer-token gate, active only when AUTH_TOKEN is configured.
+
+    /health stays open so the Compose healthcheck works without secrets;
+    /static assets are same-origin UI bundles, also open.
+    """
+
+    _PUBLIC = {"/health"}
+
+    async def dispatch(self, request: Request, call_next):
+        token = settings.AUTH_TOKEN
+        if not token or request.url.path in self._PUBLIC or request.url.path.startswith("/static"):
+            return await call_next(request)
+
+        import secrets
+        provided = request.headers.get("authorization", "")
+        if provided.lower().startswith("bearer "):
+            provided = provided[7:].strip()
+        else:
+            provided = provided.strip() or request.query_params.get("token", "")
+        if not provided or not secrets.compare_digest(provided, token):
+            return JSONResponse(status_code=401, content={"detail": "unauthorized"})
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -33,6 +73,22 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Local-only CORS (same-origin UI does not need it; prevents browser abuse)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+    ],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["*"],
+)
+# Order: added last runs first → auth → body limit → routes
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(OptionalAuthMiddleware)
 
 # Jinja2 environment with synchronous rendering (async causes issues)
 jinja_env = Environment(
@@ -72,8 +128,7 @@ async def ui_partial(view: str, request: Request):
     valid_views = ['shortlist', 'portfolio', 'events', 'track-record', 'settings']
     if view not in valid_views:
         return HTMLResponse(content="View not found", status_code=404)
-    # Debug: print which view is being rendered
-    print(f"[DEBUG] Rendering view: {view}")
+    logger.debug("Rendering view: %s", view)
     return templates.TemplateResponse(f"{view}.html", {"request": request})
 
 
